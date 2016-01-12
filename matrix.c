@@ -1,0 +1,3127 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
+
+#include "globals.h"
+
+#include "file_io.h"
+#include "grid.h"
+#include "memory.h"
+#include "netcdf.h"
+#include "superlu_ddefs.h"
+
+#include "matrix.h"
+
+int flat_len;
+int ***int3_to_flat_ind;
+int3 *flat_ind_to_int3;
+int nnz;
+
+double *nzval_row_wise;
+int_t *colind;
+int_t *rowptr;
+
+double delta_t;
+double year_cnt;
+
+adv_opt_t adv_opt;
+
+hmix_opt_t hmix_opt;
+
+vmix_opt_t vmix_opt;
+
+sink_opt_t sink_opt;
+double sink_rate;
+double sink_depth;
+char *sink_file_name;
+char *sink_field_name;
+char *sink_tracer_name;
+char *pv_file_name = NULL;
+char *pv_field_name = NULL;
+char *d_SF_d_TRACER_file_name = NULL;
+char *d_SF_d_TRACER_field_name = NULL;
+
+/******************************************************************************/
+
+void
+set_3d_double (double val, double ***FIELD)
+{
+   int i;
+   int j;
+   int k;
+
+   for (k = 0; k < km; k++)
+      for (j = 0; j < jmt; j++)
+         for (i = 0; i < imt; i++)
+            FIELD[k][j][i] = val;
+}
+
+/******************************************************************************/
+
+int
+comp_sparse_matrix_size (void)
+{
+   char *subname = "comp_sparse_matrix_size";
+   int south_flag;
+   int north_flag;
+   int i;
+   int j;
+
+   /* verify that KMT is 0 on southern- and northern-most rows */
+   south_flag = north_flag = 0;
+   for (i = 0; i < imt; i++) {
+      if (KMT[0][i])
+         south_flag = 1;
+      if (KMT[jmt - 1][i])
+         north_flag = 1;
+   }
+   if (south_flag)
+      fprintf (stderr, "non-land found on southern-most row in %s\n", subname);
+   if (north_flag)
+      fprintf (stderr, "non-land found on northern-most row in %s\n", subname);
+   if (south_flag || north_flag)
+      return 1;
+
+   flat_len = 0;
+   for (j = 0; j < jmt; j++)
+      for (i = 0; i < imt; i++)
+         flat_len += KMT[j][i];
+   if (dbg_lvl)
+      printf ("flat_len = %d\n\n", flat_len);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+/* generate mappings between model 3D indices and flat arrays */
+
+int
+gen_ind_maps (void)
+{
+   char *subname = "gen_ind_maps";
+   int i;
+   int j;
+   int k;
+   int flat_ind;
+
+   if ((int3_to_flat_ind = malloc_3d_int (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for int3_to_flat_ind\n", subname);
+      return 1;
+   }
+   if ((flat_ind_to_int3 = malloc ((size_t) flat_len * sizeof (int3))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for flat_ind_to_int3\n", subname);
+      return 1;
+   }
+   flat_ind = 0;
+   if (dbg_lvl > 1)
+      printf ("mappings between flat and 3d indices\n");
+   for (j = 0; j < jmt; j++)
+      for (i = 0; i < imt; i++)
+         for (k = 0; k < km; k++)
+            if (k < KMT[j][i]) {
+               if (dbg_lvl > 1)
+                  printf ("i = %3d, j = %3d, k = %2d, flat_ind = %d\n", i, j, k, flat_ind);
+               int3_to_flat_ind[k][j][i] = flat_ind;
+               flat_ind_to_int3[flat_ind].i = i;
+               flat_ind_to_int3[flat_ind].j = j;
+               flat_ind_to_int3[flat_ind].k = k;
+               flat_ind++;
+            } else
+               int3_to_flat_ind[k][j][i] = -1;
+   if (dbg_lvl > 1) {
+      putchar ('\n');
+      fflush (stdout);
+   }
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+put_ind_maps (char *fname)
+{
+   char *subname = "put_ind_maps";
+   int status;
+   int ncid;
+   int dimids[3];
+   int flat_len_dimid;
+   int nlon_dimid;
+   int nlat_dimid;
+   int z_t_dimid;
+   int varid;
+   char *string;
+   int attval_int;
+
+   if ((status = nc_open (fname, NC_WRITE, &ncid)))
+      return handle_nc_error (subname, "nc_open", fname, status);
+
+   /* define new dimensions and get dimids for existing ones */
+
+   if ((status = nc_redef (ncid)))
+      return handle_nc_error (subname, "nc_redef", fname, status);
+
+   if ((status = nc_def_dim (ncid, "flat_len", flat_len, &flat_len_dimid)))
+      return handle_nc_error (subname, "nc_def_dim", "flat_len", status);
+
+   if ((status = nc_inq_dimid (ncid, "nlon", &nlon_dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "nlon", status);
+
+   if ((status = nc_inq_dimid (ncid, "nlat", &nlat_dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "nlat", status);
+
+   if ((status = nc_inq_dimid (ncid, "z_t", &z_t_dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "z_t", status);
+
+   /* define new variables */
+
+   dimids[0] = z_t_dimid;
+   dimids[1] = nlat_dimid;
+   dimids[2] = nlon_dimid;
+
+   if ((status = nc_def_var (ncid, "int3_to_flat_ind", NC_INT, 3, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_ind", status);
+   string = "TLONG TLAT";
+   if ((status = nc_put_att_text (ncid, varid, "coordinates", strlen (string), string)))
+      return handle_nc_error (subname, "nc_put_att_text", "int3_to_flat_ind", status);
+   attval_int = -1;
+   if ((status = nc_put_att_int (ncid, varid, "_FillValue", NC_INT, 1, &attval_int)))
+      return handle_nc_error (subname, "nc_put_att_int", "int3_to_flat_ind", status);
+   if ((status = nc_put_att_int (ncid, varid, "missing_value", NC_INT, 1, &attval_int)))
+      return handle_nc_error (subname, "nc_put_att_int", "int3_to_flat_ind", status);
+
+   dimids[0] = flat_len_dimid;
+
+   if ((status = nc_def_var (ncid, "flat_ind_to_i", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_i", status);
+
+   if ((status = nc_def_var (ncid, "flat_ind_to_j", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_j", status);
+
+   if ((status = nc_def_var (ncid, "flat_ind_to_k", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_k", status);
+
+   if ((status = nc_close (ncid)))
+      return handle_nc_error (subname, "nc_close", fname, status);
+
+   /* write out new variables */
+
+   if (put_var_3d_int (fname, "int3_to_flat_ind", int3_to_flat_ind))
+      return 1;
+
+   /* write out flat_ind_to_[ijk] variables, first copying to a temporary contiguous array flat_ind_to_ijk */
+   {
+      int *flat_ind_to_ijk;
+      int flat_ind;
+
+      if ((flat_ind_to_ijk = malloc ((size_t) flat_len * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for flat_ind_to_ijk\n", subname);
+         return 1;
+      }
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+         flat_ind_to_ijk[flat_ind] = flat_ind_to_int3[flat_ind].i;
+      if (put_var_1d_int (fname, "flat_ind_to_i", flat_ind_to_ijk))
+         return 1;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+         flat_ind_to_ijk[flat_ind] = flat_ind_to_int3[flat_ind].j;
+      if (put_var_1d_int (fname, "flat_ind_to_j", flat_ind_to_ijk))
+         return 1;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+         flat_ind_to_ijk[flat_ind] = flat_ind_to_int3[flat_ind].k;
+      if (put_var_1d_int (fname, "flat_ind_to_k", flat_ind_to_ijk))
+         return 1;
+      free (flat_ind_to_ijk);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+get_ind_maps (char *fname)
+{
+   char *subname = "get_ind_maps";
+   int status;
+   int ncid;
+   int dimid;
+   size_t dimlen;
+
+   if (get_grid_dims (fname))
+      return (1);
+
+   if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
+      return handle_nc_error (subname, "nc_open", fname, status);
+
+   if ((status = nc_inq_dimid (ncid, "flat_len", &dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "flat_len", status);
+
+   if ((status = nc_inq_dimlen (ncid, dimid, &dimlen)))
+      return handle_nc_error (subname, "nc_inq_dimlen", "flat_len", status);
+   flat_len = dimlen;
+
+   if ((status = nc_close (ncid)))
+      return handle_nc_error (subname, "nc_close", fname, status);
+
+   if (dbg_lvl && (iam == 0)) {
+      printf ("%s: flat_len = %d\n", subname, flat_len);
+   }
+
+   /* allocate space for ind_maps */
+   if ((int3_to_flat_ind = malloc_3d_int (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for int3_to_flat_ind\n", subname);
+      return 1;
+   }
+   if ((flat_ind_to_int3 = malloc ((size_t) flat_len * sizeof (int3))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for flat_ind_to_int3\n", subname);
+      return 1;
+   }
+
+   /* read variables */
+   /* read flat_ind_to_[ijk] variables to a temporary contiguous array flat_ind_to_ijk */
+
+   if (get_var_3d_int (fname, "int3_to_flat_ind", int3_to_flat_ind))
+      return 1;
+
+   {
+      int *flat_ind_to_ijk;
+      int flat_ind;
+
+      if ((flat_ind_to_ijk = malloc ((size_t) flat_len * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for flat_ind_to_ijk\n", subname);
+         return 1;
+      }
+      if (get_var_1d_int (fname, "flat_ind_to_i", flat_ind_to_ijk))
+         return 1;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+         flat_ind_to_int3[flat_ind].i = flat_ind_to_ijk[flat_ind];
+
+      if (get_var_1d_int (fname, "flat_ind_to_j", flat_ind_to_ijk))
+         return 1;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+         flat_ind_to_int3[flat_ind].j = flat_ind_to_ijk[flat_ind];
+
+      if (get_var_1d_int (fname, "flat_ind_to_k", flat_ind_to_ijk))
+         return 1;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+         flat_ind_to_int3[flat_ind].k = flat_ind_to_ijk[flat_ind];
+
+      free (flat_ind_to_ijk);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+void
+free_ind_maps (void)
+{
+   free_3d_int (int3_to_flat_ind);
+   free (flat_ind_to_int3);
+}
+
+/******************************************************************************/
+
+int
+adv_non_nbr_cnt (int k, int j, int i)
+{
+   int cnt;
+   int ip1;
+   int im1;
+   int ip2;
+   int im2;
+
+   cnt = 0;
+   ip1 = (i < imt - 1) ? i + 1 : 0;
+   im1 = (i > 0) ? i - 1 : imt - 1;
+   ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+   im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+   if (adv_opt == adv_upwind3) {
+      /* cell 2 level shallower */
+      if (k - 2 >= 0)
+         cnt++;
+      /* cell 2 level deeper */
+      if (k + 2 < KMT[j][i])
+         cnt++;
+      /* cell 2 unit east */
+      if (k < KMT[j][ip2])
+         cnt++;
+      /* cell 2 unit west */
+      if (k < KMT[j][im2])
+         cnt++;
+      /* cell 2 unit north */
+      if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+         cnt++;
+      /* cell 2 unit south */
+      if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+         cnt++;
+   }
+
+   return cnt;
+}
+
+/******************************************************************************/
+
+int
+hmix_non_nbr_cnt (int k, int j, int i)
+{
+   int cnt;
+   int ip1;
+   int im1;
+
+   cnt = 0;
+   ip1 = (i < imt - 1) ? i + 1 : 0;
+   im1 = (i > 0) ? i - 1 : imt - 1;
+
+   if (hmix_opt == hmix_isop_file) {
+      /* shallower & east */
+      if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1]))
+         cnt++;
+      /* deeper & east */
+      if (k + 1 < KMT[j][ip1])
+         cnt++;
+      /* shallower & west */
+      if ((k - 1 >= 0) && (k - 1 < KMT[j][im1]))
+         cnt++;
+      /* deeper & west */
+      if (k + 1 < KMT[j][im1])
+         cnt++;
+      /* shallower & north */
+      if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i]))
+         cnt++;
+      /* deeper & north */
+      if (k + 1 < KMT[j + 1][i])
+         cnt++;
+      /* shallower & south */
+      if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i]))
+         cnt++;
+      /* deeper & south */
+      if (k + 1 < KMT[j - 1][i])
+         cnt++;
+   }
+
+   return cnt;
+}
+
+/******************************************************************************/
+
+int
+vmix_non_nbr_cnt (int k, int j, int i)
+{
+   int cnt;
+
+   if (vmix_opt == vmix_matrix_file)
+      cnt = KMT[j][i];
+   else
+      cnt = 0;
+
+   return cnt;
+}
+
+/******************************************************************************/
+
+int
+sink_non_nbr_cnt (int k, int j, int i)
+{
+   int cnt;
+
+   if ((sink_opt == sink_tracer) && (strcmp (sink_tracer_name, "Fe") == 0))
+      cnt = k;
+   else
+      cnt = 0;
+
+   return cnt;
+}
+
+/******************************************************************************/
+
+void
+comp_nnz (void)
+{
+   char *subname = "comp_nnz";
+   int flat_ind;
+   int i;
+   int ip1;
+   int im1;
+   int j;
+   int k;
+
+   nnz = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell itself */
+      (nnz)++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         (nnz)++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         (nnz)++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         (nnz)++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         (nnz)++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         (nnz)++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         (nnz)++;
+
+      nnz += adv_non_nbr_cnt (k, j, i);
+
+      nnz += hmix_non_nbr_cnt (k, j, i);
+
+      nnz += vmix_non_nbr_cnt (k, j, i);
+
+      nnz += sink_non_nbr_cnt (k, j, i);
+   }
+
+   if (dbg_lvl)
+      printf ("nnz       = %d\n\n", nnz);
+}
+
+/******************************************************************************/
+
+/* initialize matrix values to zero and set up sparsity pattern arrays */
+
+int
+init_matrix (void)
+{
+   char *subname = "init_matrix";
+   int coef_ind;
+   int flat_ind;
+   int i;
+   int ip1;
+   int im1;
+   int ip2;
+   int im2;
+   int j;
+   int k;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      rowptr[flat_ind] = coef_ind;
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+      /* cell itself */
+      nzval_row_wise[coef_ind] = 0.0;
+      colind[coef_ind] = int3_to_flat_ind[k][j][i];
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0) {
+         nzval_row_wise[coef_ind] = 0.0;
+         colind[coef_ind] = int3_to_flat_ind[k - 1][j][i];
+         coef_ind++;
+      }
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i]) {
+         nzval_row_wise[coef_ind] = 0.0;
+         colind[coef_ind] = int3_to_flat_ind[k + 1][j][i];
+         coef_ind++;
+      }
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1]) {
+         nzval_row_wise[coef_ind] = 0.0;
+         colind[coef_ind] = int3_to_flat_ind[k][j][ip1];
+         coef_ind++;
+      }
+      /* cell 1 unit west */
+      if (k < KMT[j][im1]) {
+         nzval_row_wise[coef_ind] = 0.0;
+         colind[coef_ind] = int3_to_flat_ind[k][j][im1];
+         coef_ind++;
+      }
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i]) {
+         nzval_row_wise[coef_ind] = 0.0;
+         colind[coef_ind] = int3_to_flat_ind[k][j + 1][i];
+         coef_ind++;
+      }
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i]) {
+         nzval_row_wise[coef_ind] = 0.0;
+         colind[coef_ind] = int3_to_flat_ind[k][j - 1][i];
+         coef_ind++;
+      }
+      if (adv_opt == adv_upwind3) {
+         /* cell 2 level shallower */
+         if (k - 2 >= 0) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k - 2][j][i];
+            coef_ind++;
+         }
+         /* cell 2 level deeper */
+         if (k + 2 < KMT[j][i]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k + 2][j][i];
+            coef_ind++;
+         }
+         /* cell 2 unit east */
+         if (k < KMT[j][ip2]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k][j][ip2];
+            coef_ind++;
+         }
+         /* cell 2 unit west */
+         if (k < KMT[j][im2]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k][j][im2];
+            coef_ind++;
+         }
+         /* cell 2 unit north */
+         if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k][j + 2][i];
+            coef_ind++;
+         }
+         /* cell 2 unit south */
+         if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k][j - 2][i];
+            coef_ind++;
+         }
+      }
+      if (hmix_opt == hmix_isop_file) {
+         /* shallower & east */
+         if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k - 1][j][ip1];
+            coef_ind++;
+         }
+         /* deeper & east */
+         if (k + 1 < KMT[j][ip1]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k + 1][j][ip1];
+            coef_ind++;
+         }
+         /* shallower & west */
+         if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k - 1][j][im1];
+            coef_ind++;
+         }
+         /* deeper & west */
+         if (k + 1 < KMT[j][im1]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k + 1][j][im1];
+            coef_ind++;
+         }
+         /* shallower & north */
+         if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k - 1][j + 1][i];
+            coef_ind++;
+         }
+         /* deeper & north */
+         if (k + 1 < KMT[j + 1][i]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k + 1][j + 1][i];
+            coef_ind++;
+         }
+         /* shallower & south */
+         if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k - 1][j - 1][i];
+            coef_ind++;
+         }
+         /* deeper & south */
+         if (k + 1 < KMT[j - 1][i]) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[k + 1][j - 1][i];
+            coef_ind++;
+         }
+      }
+      if (vmix_opt == vmix_matrix_file) {
+         int kk;
+
+         for (kk = 0; kk < KMT[j][i]; kk++) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[kk][j][i];
+            coef_ind++;
+         }
+      }
+      if ((sink_opt == sink_tracer) && (strcmp (sink_tracer_name, "Fe") == 0)) {
+         int kk;
+
+         for (kk = k - 1; kk >= 0; kk--) {
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = int3_to_flat_ind[kk][j][i];
+            coef_ind++;
+         }
+      }
+   }
+   if (coef_ind != nnz) {
+      fprintf (stderr,
+               "internal error in %s, coef_ind != nnz after setting sparsity pattern\n",
+               subname);
+      fprintf (stderr, "coef_ind = %d\nnnz      = %d\n", coef_ind, nnz);
+      return 1;
+   }
+   rowptr[flat_len] = coef_ind;
+
+   return 0;
+}
+
+/******************************************************************************/
+
+/* from sparsity pattern, we know that coef_ind for diagonal term is rowptr[flat_ind] */
+
+int
+add_diag_sink (void)
+{
+   char *subname = "add_diag_sink";
+   int flat_ind;
+   double ***SINK_RATE_FIELD;
+
+   switch (sink_opt) {
+   case sink_none:
+      break;
+   case sink_const:
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+         nzval_row_wise[rowptr[flat_ind]] = -year_cnt * sink_rate;
+      }
+      break;
+   case sink_const_shallow:
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+         int k = flat_ind_to_int3[flat_ind].k;
+         if (z_t[k] < sink_depth)
+            nzval_row_wise[rowptr[flat_ind]] = -year_cnt * sink_rate;
+      }
+      break;
+   case sink_file:
+      if ((SINK_RATE_FIELD = malloc_3d_double (km, jmt, imt)) == NULL) {
+         fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD\n", subname);
+         return 1;
+      }
+      if (get_var_3d_double (sink_file_name, sink_field_name, SINK_RATE_FIELD))
+         return 1;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+         int i = flat_ind_to_int3[flat_ind].i;
+         int j = flat_ind_to_int3[flat_ind].j;
+         int k = flat_ind_to_int3[flat_ind].k;
+         nzval_row_wise[rowptr[flat_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
+      }
+      free_3d_double (SINK_RATE_FIELD);
+      break;
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("diag sink added\n\n");
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+load_UTE (double ***UTE)
+{
+   char *subname = "load_UTE";
+   double ***WORK;
+   double **DY;
+   int i;
+   int ip1;
+   int j;
+   int k;
+
+   set_3d_double (0.0, UTE);
+
+   if ((WORK = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for WORK\n", subname);
+      return 1;
+   }
+   if ((DY = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for DY\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading UVEL,DYU from %s\n", subname, circ_fname);
+   if (get_var_3d_double (circ_fname, "UVEL", WORK))
+      return 1;
+   if (get_var_2d_double (circ_fname, "DYU", DY))
+      return 1;
+   for (k = 0; k < km; k++)
+      for (j = 1; j < jmt - 1; j++)
+         for (i = 0; i < imt; i++) {
+            if (k < KMU[j][i])
+               UTE[k][j][i] += 0.5 * WORK[k][j][i] * DY[j][i];
+            if (k < KMU[j - 1][i])
+               UTE[k][j][i] += 0.5 * WORK[k][j - 1][i] * DY[j - 1][i];
+         }
+
+   if (hmix_opt == hmix_hor_file) {
+      if (dbg_lvl)
+         printf ("%s: reading UISOP,HTE from %s\n", subname, circ_fname);
+      if (get_var_3d_double (circ_fname, "UISOP", WORK))
+         return 1;
+      if (get_var_2d_double (circ_fname, "HTE", DY))
+         return 1;
+      for (k = 0; k < km; k++)
+         for (j = 1; j < jmt - 1; j++)
+            for (i = 0; i < imt; i++) {
+               ip1 = (i < imt - 1) ? i + 1 : 0;
+               if ((k < KMT[j][i]) && (k < KMT[j][ip1]))
+                  UTE[k][j][i] += WORK[k][j][i] * DY[j][i];
+            }
+   }
+   free_2d_double (DY);
+   free_3d_double (WORK);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+load_VTN (double ***VTN)
+{
+   char *subname = "load_VTN";
+   double ***WORK;
+   double **DX;
+   int i;
+   int im1;
+   int j;
+   int k;
+
+   set_3d_double (0.0, VTN);
+
+   if ((WORK = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for WORK\n", subname);
+      return 1;
+   }
+   if ((DX = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for DX\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading VVEL,DXU from %s\n", subname, circ_fname);
+   if (get_var_3d_double (circ_fname, "VVEL", WORK))
+      return 1;
+   if (get_var_2d_double (circ_fname, "DXU", DX))
+      return 1;
+   for (k = 0; k < km; k++)
+      for (j = 1; j < jmt - 1; j++)
+         for (i = 0; i < imt; i++) {
+            im1 = (i > 0) ? i - 1 : imt - 1;
+            if (k < KMU[j][i])
+               VTN[k][j][i] += 0.5 * WORK[k][j][i] * DX[j][i];
+            if (k < KMU[j][im1])
+               VTN[k][j][i] += 0.5 * WORK[k][j][im1] * DX[j][im1];
+         }
+
+   if (hmix_opt == hmix_hor_file) {
+      if (dbg_lvl)
+         printf ("%s: reading VISOP,HTN from %s\n", subname, circ_fname);
+      if (get_var_3d_double (circ_fname, "VISOP", WORK))
+         return 1;
+      if (get_var_2d_double (circ_fname, "HTN", DX))
+         return 1;
+      for (k = 0; k < km; k++)
+         for (j = 1; j < jmt - 1; j++)
+            for (i = 0; i < imt; i++)
+               if ((k < KMT[j][i]) && (k < KMT[j + 1][i]))
+                  VTN[k][j][i] += WORK[k][j][i] * DX[j][i];
+   }
+   free_2d_double (DX);
+   free_3d_double (WORK);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+load_WVEL (double ***WVEL)
+{
+   char *subname = "load_WVEL";
+   double ***WORK;
+   int i;
+   int j;
+   int k;
+
+   set_3d_double (0.0, WVEL);
+
+   if ((WORK = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for WORK\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading WVEL from %s\n", subname, circ_fname);
+   if (get_var_3d_double (circ_fname, "WVEL", WORK))
+      return 1;
+   for (k = 0; k < km; k++)
+      for (j = 1; j < jmt - 1; j++)
+         for (i = 0; i < imt; i++)
+            if (k < KMT[j][i])
+               WVEL[k][j][i] += WORK[k][j][i];
+
+   if (hmix_opt == hmix_hor_file) {
+      if (dbg_lvl)
+         printf ("%s: reading WISOP from %s\n", subname, circ_fname);
+      if (get_var_3d_double (circ_fname, "WISOP", WORK))
+         return 1;
+      for (k = 0; k < km; k++)
+         for (j = 1; j < jmt - 1; j++)
+            for (i = 0; i < imt; i++)
+               if (k < KMT[j][i])
+                  WVEL[k][j][i] += WORK[k][j][i];
+   }
+   free_3d_double (WORK);
+
+   /* explicitly set surface velocity to zero */
+   for (j = 1; j < jmt - 1; j++)
+      for (i = 0; i < imt; i++)
+         WVEL[0][j][i] = 0.0;
+
+   return 0;
+}
+
+/******************************************************************************/
+
+void
+add_UTE_coeffs (double ***UTE)
+{
+   char *subname = "add_UTE_coeffs";
+   int flat_ind;
+   int coef_ind;
+   double east_self_interp_w;
+   double west_self_interp_w;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      switch (adv_opt) {
+      case adv_donor:
+         east_self_interp_w = (UTE[k][j][i] > 0.0) ? 1.0 : 0.0;
+         west_self_interp_w = (UTE[k][j][im1] < 0.0) ? 1.0 : 0.0;
+         break;
+      case adv_cent:
+         east_self_interp_w = 0.5;
+         west_self_interp_w = 0.5;
+         break;
+      }
+
+      /* cell itself */
+      if (k < KMT[j][ip1])
+         nzval_row_wise[coef_ind] -= east_self_interp_w * UTE[k][j][i] / TAREA[j][i] * delta_t;
+      if (k < KMT[j][im1])
+         nzval_row_wise[coef_ind] +=
+            west_self_interp_w * UTE[k][j][im1] / TAREA[j][i] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1]) {
+         nzval_row_wise[coef_ind] -=
+            (1.0 - east_self_interp_w) * UTE[k][j][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit west */
+      if (k < KMT[j][im1]) {
+         nzval_row_wise[coef_ind] +=
+            (1.0 - west_self_interp_w) * UTE[k][j][im1] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+}
+
+/******************************************************************************/
+
+void
+add_VTN_coeffs (double ***VTN)
+{
+   char *subname = "add_VTN_coeffs";
+   int flat_ind;
+   int coef_ind;
+   double north_self_interp_w;
+   double south_self_interp_w;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      switch (adv_opt) {
+      case adv_donor:
+         north_self_interp_w = (VTN[k][j][i] > 0.0) ? 1.0 : 0.0;
+         south_self_interp_w = (VTN[k][j - 1][i] < 0.0) ? 1.0 : 0.0;
+         break;
+      case adv_cent:
+         north_self_interp_w = 0.5;
+         south_self_interp_w = 0.5;
+         break;
+      }
+
+      /* cell itself */
+      if (k < KMT[j + 1][i])
+         nzval_row_wise[coef_ind] -= north_self_interp_w * VTN[k][j][i] / TAREA[j][i] * delta_t;
+      if (k < KMT[j - 1][i])
+         nzval_row_wise[coef_ind] +=
+            south_self_interp_w * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i]) {
+         nzval_row_wise[coef_ind] -=
+            (1.0 - north_self_interp_w) * VTN[k][j][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i]) {
+         nzval_row_wise[coef_ind] +=
+            (1.0 - south_self_interp_w) * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+}
+
+/******************************************************************************/
+
+void
+add_WVEL_coeffs (double ***WVEL)
+{
+   char *subname = "add_WVEL_coeffs";
+   int flat_ind;
+   int coef_ind;
+   double top_self_interp_w;
+   double bot_self_interp_w;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      switch (adv_opt) {
+      case adv_donor:
+         top_self_interp_w = (WVEL[k][j][i] > 0.0) ? 1.0 : 0.0;
+         if (k + 1 < KMT[j][i])
+            bot_self_interp_w = (WVEL[k + 1][j][i] < 0.0) ? 1.0 : 0.0;
+         break;
+      case adv_cent:
+         top_self_interp_w = 0.5;
+         bot_self_interp_w = 0.5;
+         break;
+      }
+
+      /* cell itself */
+      if (k - 1 >= 0)
+         nzval_row_wise[coef_ind] -= top_self_interp_w * WVEL[k][j][i] / dz[k] * delta_t;
+      if (k + 1 < KMT[j][i])
+         nzval_row_wise[coef_ind] += bot_self_interp_w * WVEL[k + 1][j][i] / dz[k] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0) {
+         nzval_row_wise[coef_ind] -=
+            (1.0 - top_self_interp_w) * WVEL[k][j][i] / dz[k] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i]) {
+         nzval_row_wise[coef_ind] +=
+            (1.0 - bot_self_interp_w) * WVEL[k + 1][j][i] / dz[k] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+}
+
+/******************************************************************************/
+
+int
+load_UTE_upwind3 (double ***UTE_POS, double ***UTE_NEG)
+{
+   char *subname = "load_UTE_upwind3";
+
+   set_3d_double (0.0, UTE_POS);
+   set_3d_double (0.0, UTE_NEG);
+
+   if (dbg_lvl)
+      printf ("%s: reading UTE_{POS,NEG} from %s\n", subname, circ_fname);
+
+   if (get_var_3d_double (circ_fname, "UTE_POS", UTE_POS))
+      return 1;
+   if (get_var_3d_double (circ_fname, "UTE_NEG", UTE_NEG))
+      return 1;
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+load_VTN_upwind3 (double ***VTN_POS, double ***VTN_NEG)
+{
+   char *subname = "load_VTN_upwind3";
+
+   set_3d_double (0.0, VTN_POS);
+   set_3d_double (0.0, VTN_NEG);
+
+   if (dbg_lvl)
+      printf ("%s: reading VTN_{POS,NEG} from %s\n", subname, circ_fname);
+
+   if (get_var_3d_double (circ_fname, "VTN_POS", VTN_POS))
+      return 1;
+   if (get_var_3d_double (circ_fname, "VTN_NEG", VTN_NEG))
+      return 1;
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
+{
+   char *subname = "load_WVEL_upwind3";
+   int i;
+   int j;
+
+   set_3d_double (0.0, WVEL_POS);
+   set_3d_double (0.0, WVEL_NEG);
+
+   if (dbg_lvl)
+      printf ("%s: reading WTK_{POS,NEG} from %s\n", subname, circ_fname);
+
+   if (get_var_3d_double (circ_fname, "WTK_POS", WVEL_POS))
+      return 1;
+   if (get_var_3d_double (circ_fname, "WTK_NEG", WVEL_NEG))
+      return 1;
+
+   /* explicitly set surface velocity to zero */
+   for (j = 1; j < jmt - 1; j++)
+      for (i = 0; i < imt; i++) {
+         WVEL_POS[0][j][i] = 0.0;
+         WVEL_NEG[0][j][i] = 0.0;
+      }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+void
+add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
+{
+   char *subname = "add_UTE_coeffs_upwind3";
+   int flat_ind;
+   int coef_ind;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int ip2;
+      int im2;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+      /* cell itself */
+      /* advection through east face */
+      if (k < KMT[j][im1])
+         nzval_row_wise[coef_ind] -= 0.75 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+      else
+         nzval_row_wise[coef_ind] -= (0.75 - 0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+      nzval_row_wise[coef_ind] -= 0.375 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+      /* advection through west face */
+      nzval_row_wise[coef_ind] += 0.375 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+      if (k < KMT[j][ip1])
+         nzval_row_wise[coef_ind] += 0.75 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+      else
+         nzval_row_wise[coef_ind] +=
+            (0.75 - 0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1]) {
+         /* advection through east face */
+         nzval_row_wise[coef_ind] -= 0.375 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+         if (k < KMT[j][ip2])
+            nzval_row_wise[coef_ind] -= 0.75 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         else
+            nzval_row_wise[coef_ind] -=
+               (0.75 - 0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         /* advection through west face */
+         nzval_row_wise[coef_ind] += (-0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit west */
+      if (k < KMT[j][im1]) {
+         /* advection through east face */
+         nzval_row_wise[coef_ind] -= (-0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+         /* advection through west face */
+         if (k < KMT[j][im2])
+            nzval_row_wise[coef_ind] += 0.75 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+         else
+            nzval_row_wise[coef_ind] +=
+               (0.75 - 0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+         nzval_row_wise[coef_ind] += 0.375 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      /* cell 2 level shallower */
+      if (k - 2 >= 0)
+         coef_ind++;
+      /* cell 2 level deeper */
+      if (k + 2 < KMT[j][i])
+         coef_ind++;
+      /* cell 2 unit east */
+      if (k < KMT[j][ip2]) {
+         /* advection through east face */
+         nzval_row_wise[coef_ind] -= (-0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 2 unit west */
+      if (k < KMT[j][im2]) {
+         /* advection through west face */
+         nzval_row_wise[coef_ind] += (-0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 2 unit north */
+      if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+         coef_ind++;
+      /* cell 2 unit south */
+      if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+         coef_ind++;
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+}
+
+/******************************************************************************/
+
+void
+add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
+{
+   char *subname = "add_VTN_coeffs_upwind3";
+   int flat_ind;
+   int coef_ind;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int ip2;
+      int im2;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+      /* cell itself */
+      /* advection through north face */
+      if (k < KMT[j - 1][i])
+         nzval_row_wise[coef_ind] -= 0.75 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+      else
+         nzval_row_wise[coef_ind] -= (0.75 - 0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+      nzval_row_wise[coef_ind] -= 0.375 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+      /* advection through south face */
+      nzval_row_wise[coef_ind] += 0.375 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+      if (k < KMT[j + 1][i])
+         nzval_row_wise[coef_ind] += 0.75 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+      else
+         nzval_row_wise[coef_ind] +=
+            (0.75 - 0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i]) {
+         /* advection through north face */
+         nzval_row_wise[coef_ind] -= 0.375 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+         if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+            nzval_row_wise[coef_ind] -= 0.75 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         else
+            nzval_row_wise[coef_ind] -=
+               (0.75 - 0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         /* advection through south face */
+         nzval_row_wise[coef_ind] += (-0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i]) {
+         /* advection through north face */
+         nzval_row_wise[coef_ind] -= (-0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+         /* advection through south face */
+         if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+            nzval_row_wise[coef_ind] += 0.75 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+         else
+            nzval_row_wise[coef_ind] +=
+               (0.75 - 0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+         nzval_row_wise[coef_ind] += 0.375 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+
+      /* cell 2 level shallower */
+      if (k - 2 >= 0)
+         coef_ind++;
+      /* cell 2 level deeper */
+      if (k + 2 < KMT[j][i])
+         coef_ind++;
+      /* cell 2 unit east */
+      if (k < KMT[j][ip2])
+         coef_ind++;
+      /* cell 2 unit west */
+      if (k < KMT[j][im2])
+         coef_ind++;
+      /* cell 2 unit north */
+      if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
+         /* advection through north face */
+         nzval_row_wise[coef_ind] -= (-0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+      /* cell 2 unit south */
+      if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
+         /* advection through south face */
+         nzval_row_wise[coef_ind] += (-0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+      }
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+}
+
+/******************************************************************************/
+
+int
+add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
+{
+   char *subname = "add_WVEL_coeffs_upwind3";
+   int flat_ind;
+   int coef_ind;
+   double *dzc_tmp;
+   double *dzc;
+   double *talfzp;
+   double *tbetzp;
+   double *tgamzp;
+   double *talfzm;
+   double *tbetzm;
+   double *tdelzm;
+   int k;
+
+   if ((dzc_tmp = malloc ((size_t) (km + 2) * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for dzc\n", subname);
+      return 1;
+   }
+   dzc = dzc_tmp + 1;
+   if ((talfzp = malloc ((size_t) km * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for talfzp\n", subname);
+      return 1;
+   }
+   if ((tbetzp = malloc ((size_t) km * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for tbetzp\n", subname);
+      return 1;
+   }
+   if ((tgamzp = malloc ((size_t) km * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for tgamzp\n", subname);
+      return 1;
+   }
+   if ((talfzm = malloc ((size_t) km * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for talfzm\n", subname);
+      return 1;
+   }
+   if ((tbetzm = malloc ((size_t) km * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for tbetzm\n", subname);
+      return 1;
+   }
+   if ((tdelzm = malloc ((size_t) km * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for tdelzm\n", subname);
+      return 1;
+   }
+
+   /* k indices shifted wrt index in POP, but relative */
+   /* indices between dz and dzc is the same           */
+   /*                                                  */
+   /*       index range   index range                  */
+   /* VAR     in POP         here                      */
+   /*  dz      1:km          0:km-1                    */
+   /* dzc      0:km+1       -1:km                      */
+
+   dzc[-1] = dz[0];
+   for (k = 0; k < km; k++)
+      dzc[k] = dz[k];
+   dzc[km] = dzc[km - 1];
+
+   for (k = 0; k < km - 1; k++) {
+      talfzp[k] =
+         dz[k] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dzc[k - 1] +
+                                                                     2.0 * dz[k] + dz[k + 1]);
+      tbetzp[k] =
+         dz[k + 1] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dz[k] + dzc[k - 1]);
+      tgamzp[k] =
+         -(dz[k] * dz[k + 1]) / (dz[k] + dzc[k - 1]) / (dz[k + 1] + dzc[k - 1] + 2.0 * dz[k]);
+   }
+   tbetzp[0] = tbetzp[0] + tgamzp[0];
+   tgamzp[0] = 0.0;
+   talfzp[km - 1] = 0.0;
+   tbetzp[km - 1] = 0.0;
+   tgamzp[km - 1] = 0.0;
+
+   for (k = 0; k < km - 1; k++) {
+      talfzm[k] =
+         dz[k] * (2.0 * dz[k + 1] + dzc[k + 2]) / (dz[k] + dz[k + 1]) / (dz[k + 1] +
+                                                                         dzc[k + 2]);
+      tbetzm[k] =
+         dz[k + 1] * (2.0 * dz[k + 1] + dzc[k + 2]) / (dz[k] + dz[k + 1]) / (dz[k] +
+                                                                             dzc[k + 2] +
+                                                                             2.0 * dz[k + 1]);
+      tdelzm[k] =
+         -(dz[k] * dz[k + 1]) / (dz[k + 1] + dzc[k + 2]) / (dz[k] + dzc[k + 2] +
+                                                            2.0 * dz[k + 1]);
+   }
+   talfzm[km - 1] = 0.0;
+   tbetzm[km - 1] = 0.0;
+   tdelzm[km - 1] = 0.0;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int ip2;
+      int im2;
+      int j;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+      /* cell itself */
+      /* advection through top face */
+      if (k - 1 >= 0) {
+         if (k + 1 < KMT[j][i])
+            nzval_row_wise[coef_ind] -= talfzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
+         else
+            nzval_row_wise[coef_ind] -=
+               (talfzm[k - 1] + tdelzm[k - 1]) * WVEL_POS[k][j][i] / dz[k] * delta_t;
+         nzval_row_wise[coef_ind] -= talfzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+      }
+      /* advection through bottom face */
+      if (k + 1 < KMT[j][i]) {
+         nzval_row_wise[coef_ind] += tbetzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+         nzval_row_wise[coef_ind] += tbetzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+      }
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0) {
+         /* advection through top face */
+         nzval_row_wise[coef_ind] -= tbetzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
+         nzval_row_wise[coef_ind] -= tbetzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+         /* advection through bottom face */
+         if (k + 1 < KMT[j][i])
+            nzval_row_wise[coef_ind] += tgamzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i]) {
+         /* advection through top face */
+         if (k - 1 >= 0)
+            nzval_row_wise[coef_ind] -= tdelzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
+         /* advection through bottom face */
+         if (k + 2 < KMT[j][i])
+            nzval_row_wise[coef_ind] += talfzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+         else
+            nzval_row_wise[coef_ind] +=
+               (talfzm[k] + tdelzm[k]) * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+         nzval_row_wise[coef_ind] += talfzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+         coef_ind++;
+      }
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      /* cell 2 level shallower */
+      if (k - 2 >= 0) {
+         /* advection through top face */
+         nzval_row_wise[coef_ind] -= tgamzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+         coef_ind++;
+      }
+      /* cell 2 level deeper */
+      if (k + 2 < KMT[j][i]) {
+         /* advection through bottom face */
+         nzval_row_wise[coef_ind] += tdelzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+         coef_ind++;
+      }
+      /* cell 2 unit east */
+      if (k < KMT[j][ip2])
+         coef_ind++;
+      /* cell 2 unit west */
+      if (k < KMT[j][im2])
+         coef_ind++;
+      /* cell 2 unit north */
+      if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+         coef_ind++;
+      /* cell 2 unit south */
+      if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+         coef_ind++;
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+   free (dzc_tmp);
+   free (talfzp);
+   free (tbetzp);
+   free (tgamzp);
+   free (talfzm);
+   free (tbetzm);
+   free (tdelzm);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_adv (void)
+{
+   char *subname = "add_adv";
+
+   double ***VEL_WIDTH;
+   double ***VEL_WIDTH_POS;
+   double ***VEL_WIDTH_NEG;
+
+   switch (adv_opt) {
+   case adv_none:
+      break;
+   case adv_donor:
+   case adv_cent:
+      if ((VEL_WIDTH = malloc_3d_double (km, jmt, imt)) == NULL) {
+         fprintf (stderr, "malloc failed in %s for VEL_WIDTH\n", subname);
+         return 1;
+      }
+      if (load_UTE (VEL_WIDTH))
+         return 1;
+      add_UTE_coeffs (VEL_WIDTH);
+      if (load_VTN (VEL_WIDTH))
+         return 1;
+      add_VTN_coeffs (VEL_WIDTH);
+      if (load_WVEL (VEL_WIDTH))
+         return 1;
+      add_WVEL_coeffs (VEL_WIDTH);
+      free_3d_double (VEL_WIDTH);
+      break;
+   case adv_upwind3:
+      if ((VEL_WIDTH_POS = malloc_3d_double (km, jmt, imt)) == NULL) {
+         fprintf (stderr, "malloc failed in %s for VEL_WIDTH_POS\n", subname);
+         return 1;
+      }
+      if ((VEL_WIDTH_NEG = malloc_3d_double (km, jmt, imt)) == NULL) {
+         fprintf (stderr, "malloc failed in %s for VEL_WIDTH_NEG\n", subname);
+         return 1;
+      }
+      if (load_UTE_upwind3 (VEL_WIDTH_POS, VEL_WIDTH_NEG))
+         return 1;
+      add_UTE_coeffs_upwind3 (VEL_WIDTH_POS, VEL_WIDTH_NEG);
+      if (load_VTN_upwind3 (VEL_WIDTH_POS, VEL_WIDTH_NEG))
+         return 1;
+      add_VTN_coeffs_upwind3 (VEL_WIDTH_POS, VEL_WIDTH_NEG);
+      if (load_WVEL_upwind3 (VEL_WIDTH_POS, VEL_WIDTH_NEG))
+         return 1;
+      if (add_WVEL_coeffs_upwind3 (VEL_WIDTH_POS, VEL_WIDTH_NEG))
+         return 1;
+      free_3d_double (VEL_WIDTH_POS);
+      free_3d_double (VEL_WIDTH_NEG);
+      break;
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("adv terms added\n\n");
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_hmix_isop_file (void)
+{
+   char *subname = "add_hmix_isop_file";
+   int iprime;
+   int jprime;
+   int kprime;
+   double ***IRF;
+   char IRF_name[64];
+
+   int flat_ind;
+   int coef_ind;
+
+   if ((IRF = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for IRF\n", subname);
+      return 1;
+   }
+   for (iprime = 0; iprime < 4; iprime++)
+      for (jprime = 0; jprime < 3; jprime++)
+         for (kprime = 0; kprime < 3; kprime++) {
+            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_%d_%d_%d", iprime + 1, jprime + 1,
+                     kprime + 1);
+            if (dbg_lvl)
+               printf ("%s: reading %s from %s\n", subname, IRF_name, circ_fname);
+            if (get_var_3d_double (circ_fname, IRF_name, IRF))
+               return 1;
+
+            coef_ind = 0;
+            for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+               int i;
+               int ip1;
+               int im1;
+               int j;
+               int k;
+
+               i = flat_ind_to_int3[flat_ind].i;
+               j = flat_ind_to_int3[flat_ind].j;
+               k = flat_ind_to_int3[flat_ind].k;
+               ip1 = (i < imt - 1) ? i + 1 : 0;
+               im1 = (i > 0) ? i - 1 : imt - 1;
+
+               /* cell itself */
+               if ((i % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
+                  nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+               coef_ind++;
+               /* cell 1 level shallower */
+               if (k - 1 >= 0) {
+                  if ((i % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* cell 1 level deeper */
+               if (k + 1 < KMT[j][i]) {
+                  if ((i % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* cell 1 unit east */
+               if (k < KMT[j][ip1]) {
+                  if ((ip1 % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* cell 1 unit west */
+               if (k < KMT[j][im1]) {
+                  if ((im1 % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* cell 1 unit north */
+               if (k < KMT[j + 1][i]) {
+                  if ((i % 4 == iprime) && ((j + 1) % 3 == jprime) && (k % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* cell 1 unit south */
+               if (k < KMT[j - 1][i]) {
+                  if ((i % 4 == iprime) && ((j - 1) % 3 == jprime) && (k % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+
+               coef_ind += adv_non_nbr_cnt (k, j, i);
+
+               /* shallower & east */
+               if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
+                  if ((ip1 % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* deeper & east */
+               if (k + 1 < KMT[j][ip1]) {
+                  if ((ip1 % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* shallower & west */
+               if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
+                  if ((im1 % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* deeper & west */
+               if (k + 1 < KMT[j][im1]) {
+                  if ((im1 % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* shallower & north */
+               if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
+                  if ((i % 4 == iprime) && ((j + 1) % 3 == jprime)
+                      && ((k - 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* deeper & north */
+               if (k + 1 < KMT[j + 1][i]) {
+                  if ((i % 4 == iprime) && ((j + 1) % 3 == jprime)
+                      && ((k + 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* shallower & south */
+               if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
+                  if ((i % 4 == iprime) && ((j - 1) % 3 == jprime)
+                      && ((k - 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+               /* deeper & south */
+               if (k + 1 < KMT[j - 1][i]) {
+                  if ((i % 4 == iprime) && ((j - 1) % 3 == jprime)
+                      && ((k + 1) % 3 == kprime))
+                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                  coef_ind++;
+               }
+
+               coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+               coef_ind += sink_non_nbr_cnt (k, j, i);
+            }
+            if (dbg_lvl > 1)
+               printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+         }
+
+   free_3d_double (IRF);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_hmix_hor_file (void)
+{
+   char *subname = "add_hmix_hor_file";
+   double ***WORK;
+   double ***KAPPA;
+   double **HUS;
+   double **HTE;
+   double **HUW;
+   double **HTN;
+
+   int flat_ind;
+   int coef_ind;
+
+   if ((KAPPA = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for KAPPA\n", subname);
+      return 1;
+   }
+   if ((WORK = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for WORK\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading KAPPA_ISOP,HOR_DIFF from %s\n", subname, circ_fname);
+   if (get_var_3d_double (circ_fname, "KAPPA_ISOP", KAPPA))
+      return 1;
+   if (get_var_3d_double (circ_fname, "HOR_DIFF", WORK))
+      return 1;
+   {
+      int i;
+      int j;
+      int k;
+      for (k = 0; k < km; k++)
+         for (j = 1; j < jmt - 1; j++)
+            for (i = 0; i < imt; i++)
+               if (k < KMT[j][i])
+                  KAPPA[k][j][i] += WORK[k][j][i];
+   }
+   free_3d_double (WORK);
+
+   if ((HUS = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HUS\n", subname);
+      return 1;
+   }
+   if ((HTE = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HTE\n", subname);
+      return 1;
+   }
+   if ((HUW = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HUW\n", subname);
+      return 1;
+   }
+   if ((HTN = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HTN\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading HUS,HTE,HUW,HTN from %s\n", subname, circ_fname);
+   if (get_var_2d_double (circ_fname, "HUS", HUS))
+      return 1;
+   if (get_var_2d_double (circ_fname, "HTE", HTE))
+      return 1;
+   if (get_var_2d_double (circ_fname, "HUW", HUW))
+      return 1;
+   if (get_var_2d_double (circ_fname, "HTN", HTN))
+      return 1;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      double ce;
+      double cw;
+      double cn;
+      double cs;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         ce =
+            0.5 * (KAPPA[k][j][i] +
+                   KAPPA[k][j][ip1]) * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
+      else
+         ce = 0.0;
+
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         cw =
+            0.5 * (KAPPA[k][j][im1] +
+                   KAPPA[k][j][i]) * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
+      else
+         cw = 0.0;
+
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         cn =
+            0.5 * (KAPPA[k][j][i] +
+                   KAPPA[k][j + 1][i]) * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
+      else
+         cn = 0.0;
+
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         cs = 0.5 * (KAPPA[k][j - 1][i] + KAPPA[k][j][i]) * HTN[j - 1][i] / HUW[j - 1]
+            [i] / TAREA[j][i] * delta_t;
+      else
+         cs = 0.0;
+
+      /* cell itself */
+      nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1]) {
+         nzval_row_wise[coef_ind] += ce;
+         coef_ind++;
+      }
+      /* cell 1 unit west */
+      if (k < KMT[j][im1]) {
+         nzval_row_wise[coef_ind] += cw;
+         coef_ind++;
+      }
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i]) {
+         nzval_row_wise[coef_ind] += cn;
+         coef_ind++;
+      }
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i]) {
+         nzval_row_wise[coef_ind] += cs;
+         coef_ind++;
+      }
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   free_2d_double (HTN);
+   free_2d_double (HUW);
+   free_2d_double (HTE);
+   free_2d_double (HUS);
+   free_3d_double (KAPPA);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_hmix_const (void)
+{
+   char *subname = "add_hmix_const";
+   double **HUS;
+   double **HTE;
+   double **HUW;
+   double **HTN;
+
+   int flat_ind;
+   int coef_ind;
+   double ah;
+
+   ah = 4.0e6;
+
+   if ((HUS = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HUS\n", subname);
+      return 1;
+   }
+   if ((HTE = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HTE\n", subname);
+      return 1;
+   }
+   if ((HUW = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HUW\n", subname);
+      return 1;
+   }
+   if ((HTN = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for HTN\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading HUS,HTE,HUW,HTN from %s\n", subname, circ_fname);
+   if (get_var_2d_double (circ_fname, "HUS", HUS))
+      return 1;
+   if (get_var_2d_double (circ_fname, "HTE", HTE))
+      return 1;
+   if (get_var_2d_double (circ_fname, "HUW", HUW))
+      return 1;
+   if (get_var_2d_double (circ_fname, "HTN", HTN))
+      return 1;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      double ce;
+      double cw;
+      double cn;
+      double cs;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         ce = ah * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
+      else
+         ce = 0.0;
+
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         cw = ah * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
+      else
+         cw = 0.0;
+
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         cn = ah * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
+      else
+         cn = 0.0;
+
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         cs = ah * HTN[j - 1][i] / HUW[j - 1][i] / TAREA[j][i] * delta_t;
+      else
+         cs = 0.0;
+
+      /* cell itself */
+      nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1]) {
+         nzval_row_wise[coef_ind] += ce;
+         coef_ind++;
+      }
+      /* cell 1 unit west */
+      if (k < KMT[j][im1]) {
+         nzval_row_wise[coef_ind] += cw;
+         coef_ind++;
+      }
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i]) {
+         nzval_row_wise[coef_ind] += cn;
+         coef_ind++;
+      }
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i]) {
+         nzval_row_wise[coef_ind] += cs;
+         coef_ind++;
+      }
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   free_2d_double (HTN);
+   free_2d_double (HUW);
+   free_2d_double (HTE);
+   free_2d_double (HUS);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_hmix (void)
+{
+   char *subname = "add_hmix";
+
+   switch (hmix_opt) {
+   case hmix_none:
+      break;
+   case hmix_const:
+      if (add_hmix_const ())
+         return 1;
+      break;
+   case hmix_hor_file:
+      if (adv_opt == adv_upwind3) {
+         fprintf (stderr, "cannot use hmix_hor_file with adv_upwind3\n");
+         return 1;
+      }
+      if (add_hmix_hor_file ())
+         return 1;
+      break;
+   case hmix_isop_file:
+      if (add_hmix_isop_file ())
+         return 1;
+      break;
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("hmix terms added\n\n");
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_vmix_matrix_file (void)
+{
+   char *subname = "add_vmix_matrix_file";
+   char varname[64];
+   double ***vmix_matrix_var;
+
+   int kprime;
+   int flat_ind;
+   int coef_ind;
+
+   if ((vmix_matrix_var = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for vmix_matrix_var\n", subname);
+      return 1;
+   }
+
+   if (dbg_lvl)
+      printf ("%s: reading vmix_matrix vars from %s\n", subname, circ_fname);
+
+   for (kprime = 0; kprime < km; kprime++) {
+      sprintf (varname, "vmix_matrix_%03d_CUR", kprime + 1);
+      if (dbg_lvl)
+         printf ("%s: reading %s from %s\n", subname, varname, circ_fname);
+      if (get_var_3d_double (circ_fname, varname, vmix_matrix_var))
+         return 1;
+
+      coef_ind = 0;
+      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
+         int kk;
+
+         i = flat_ind_to_int3[flat_ind].i;
+         j = flat_ind_to_int3[flat_ind].j;
+         k = flat_ind_to_int3[flat_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+
+         /* cell itself */
+         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
+
+         coef_ind += adv_non_nbr_cnt (k, j, i);
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         for (kk = 0; kk < KMT[j][i]; kk++) {
+            if (kk == kprime)
+               nzval_row_wise[coef_ind] += vmix_matrix_var[k][j][i] * delta_t;
+            coef_ind++;
+         }
+
+         coef_ind += sink_non_nbr_cnt (k, j, i);
+      }
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   free_3d_double (vmix_matrix_var);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_vmix_file (void)
+{
+   char *subname = "add_vmix_file";
+   char *varname;
+   double ***VDC_TOTAL, ***VDC_READ;
+   int i;
+   int j;
+   int k;
+
+   int flat_ind;
+   int coef_ind;
+
+   if ((VDC_TOTAL = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for VDC_TOTAL\n", subname);
+      return 1;
+   }
+   if ((VDC_READ = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for VDC_READ\n", subname);
+      return 1;
+   }
+
+   varname = "VDC_S";
+   if (dbg_lvl)
+      printf ("%s: reading %s from %s for VDC\n", subname, varname, circ_fname);
+   if (get_var_3d_double (circ_fname, varname, VDC_TOTAL))
+      return 1;
+
+   varname = "VDC_GM";
+   if (dbg_lvl)
+      printf ("%s: reading %s from %s for VDC\n", subname, varname, circ_fname);
+   if (get_var_3d_double (circ_fname, varname, VDC_READ))
+      return 1;
+
+   for (k = 0; k < km; k++)
+      for (j = 1; j < jmt - 1; j++)
+         for (i = 0; i < imt; i++)
+            VDC_TOTAL[k][j][i] += VDC_READ[k][j][i];
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      double ct;
+      double cb;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         ct = VDC_TOTAL[k - 1][j][i] / (0.5 * (dz[k - 1] + dz[k])) / dz[k] * delta_t;
+      else
+         ct = 0.0;
+
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         cb = VDC_TOTAL[k][j][i] / (0.5 * (dz[k] + dz[k + 1])) / dz[k] * delta_t;
+      else
+         cb = 0.0;
+
+      /* cell itself */
+      nzval_row_wise[coef_ind] -= (ct + cb);
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0) {
+         nzval_row_wise[coef_ind] += ct;
+         coef_ind++;
+      }
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i]) {
+         nzval_row_wise[coef_ind] += cb;
+         coef_ind++;
+      }
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   free_3d_double (VDC_READ);
+   free_3d_double (VDC_TOTAL);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+void
+add_vmix_const (void)
+{
+   char *subname = "add_vmix_const";
+   int flat_ind;
+   int coef_ind;
+   double vdc;
+
+   vdc = 0.1;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      double ct;
+      double cb;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         ct = vdc / (0.5 * (dz[k - 1] + dz[k])) / dz[k] * delta_t;
+      else
+         ct = 0.0;
+
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         cb = vdc / (0.5 * (dz[k] + dz[k + 1])) / dz[k] * delta_t;
+      else
+         cb = 0.0;
+
+      /* cell itself */
+      nzval_row_wise[coef_ind] -= (ct + cb);
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0) {
+         nzval_row_wise[coef_ind] += ct;
+         coef_ind++;
+      }
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i]) {
+         nzval_row_wise[coef_ind] += cb;
+         coef_ind++;
+      }
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+}
+
+/******************************************************************************/
+
+
+int
+add_vmix (void)
+{
+   char *subname = "add_vmix";
+
+   switch (vmix_opt) {
+   case vmix_matrix_file:
+      if (add_vmix_matrix_file ())
+         return 1;
+      break;
+   case vmix_file:
+      if (add_vmix_file ())
+         return 1;
+      break;
+   case vmix_const:
+      add_vmix_const ();
+      break;
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("vmix terms added\n\n");
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_pv (void)
+{
+   char *subname = "add_pv";
+   double **PV;
+
+   int flat_ind;
+   int coef_ind;
+
+   if ((PV = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for PV\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading %s for piston velocity from %s\n", subname, pv_field_name,
+              pv_file_name);
+   if (get_var_2d_double (pv_file_name, pv_field_name, PV))
+      return 1;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell itself */
+      if (k == 0)
+         nzval_row_wise[coef_ind] -= PV[j][i] / dz[0] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   if (dbg_lvl > 1) {
+      printf ("pv terms added\n\n");
+      fflush (stdout);
+   }
+
+   free_2d_double (PV);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_d_SF_d_TRACER (void)
+{
+   char *subname = "add_d_SF_d_TRACER";
+   double **d_SF_d_TRACER;
+
+   int flat_ind;
+   int coef_ind;
+
+   if ((d_SF_d_TRACER = malloc_2d_double (jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading %s for piston velocity from %s\n", subname, d_SF_d_TRACER_field_name,
+              d_SF_d_TRACER_file_name);
+   if (get_var_2d_double (d_SF_d_TRACER_file_name, d_SF_d_TRACER_field_name, d_SF_d_TRACER))
+      return 1;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell itself */
+      if (k == 0)
+         nzval_row_wise[coef_ind] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += sink_non_nbr_cnt (k, j, i);
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   if (dbg_lvl > 1) {
+      printf ("d_SF_d_TRACER terms added\n\n");
+      fflush (stdout);
+   }
+
+   free_2d_double (d_SF_d_TRACER);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_sink_Fe ()
+{
+   char *subname = "add_sink_Fe";
+   double ***dFe_scav_dFe;
+   double ***dP_iron_REMIN_dP_iron_FLUX_IN;
+   double ***dP_iron_REMIN_dP_iron_PROD;
+
+   double f_fescav_P_iron = 1.0;
+
+   int flat_ind;
+   int coef_ind;
+
+   if ((dFe_scav_dFe = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for dFe_scav_dFe\n", subname);
+      return 1;
+   }
+   if ((dP_iron_REMIN_dP_iron_FLUX_IN = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for dP_iron_REMIN_dP_iron_FLUX_IN\n", subname);
+      return 1;
+   }
+   if ((dP_iron_REMIN_dP_iron_PROD = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for dP_iron_REMIN_dP_iron_PROD\n", subname);
+      return 1;
+   }
+   if (dbg_lvl)
+      printf ("%s: reading dFe_scav_dFe from %s\n", subname, sink_file_name);
+   if (get_var_3d_double (sink_file_name, "dFe_scav_dFe", dFe_scav_dFe))
+      return 1;
+   if (dbg_lvl)
+      printf ("%s: reading dP_iron_REMIN_dP_iron_FLUX_IN from %s\n", subname, sink_file_name);
+   if (get_var_3d_double
+       (sink_file_name, "dP_iron_REMIN_dP_iron_FLUX_IN", dP_iron_REMIN_dP_iron_FLUX_IN))
+      return 1;
+   if (dbg_lvl)
+      printf ("%s: reading dP_iron_REMIN_dP_iron_PROD from %s\n", subname, sink_file_name);
+   if (get_var_3d_double
+       (sink_file_name, "dP_iron_REMIN_dP_iron_PROD", dP_iron_REMIN_dP_iron_PROD))
+      return 1;
+
+   coef_ind = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int i;
+      int ip1;
+      int im1;
+      int j;
+      int k;
+      int kk;
+
+      i = flat_ind_to_int3[flat_ind].i;
+      j = flat_ind_to_int3[flat_ind].j;
+      k = flat_ind_to_int3[flat_ind].k;
+      ip1 = (i < imt - 1) ? i + 1 : 0;
+      im1 = (i > 0) ? i - 1 : imt - 1;
+
+      /* cell itself, including remineralized particle Fe for bottom cell */
+      nzval_row_wise[coef_ind] -=
+         year_cnt * (1.0 -
+                     f_fescav_P_iron * dP_iron_REMIN_dP_iron_PROD[k][j][i]) *
+         dFe_scav_dFe[k][j][i];
+
+      coef_ind++;
+      /* cell 1 level shallower */
+      if (k - 1 >= 0)
+         coef_ind++;
+      /* cell 1 level deeper */
+      if (k + 1 < KMT[j][i])
+         coef_ind++;
+      /* cell 1 unit east */
+      if (k < KMT[j][ip1])
+         coef_ind++;
+      /* cell 1 unit west */
+      if (k < KMT[j][im1])
+         coef_ind++;
+      /* cell 1 unit north */
+      if (k < KMT[j + 1][i])
+         coef_ind++;
+      /* cell 1 unit south */
+      if (k < KMT[j - 1][i])
+         coef_ind++;
+
+      coef_ind += adv_non_nbr_cnt (k, j, i);
+
+      coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+      coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+      {
+         double cum_weight = dP_iron_REMIN_dP_iron_FLUX_IN[k][j][i];
+         for (kk = k - 1; kk >= 0; kk--) {
+            nzval_row_wise[coef_ind] =
+               year_cnt * cum_weight * (1.0 -
+                                        dP_iron_REMIN_dP_iron_PROD[kk][j][i]) * dz[kk] *
+               f_fescav_P_iron * dFe_scav_dFe[kk][j][i];
+            coef_ind++;
+            cum_weight *= 1.0 - dP_iron_REMIN_dP_iron_FLUX_IN[kk][j][i] * dz[kk];
+         }
+      }
+   }
+   if (dbg_lvl > 1)
+      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
+
+   if (dbg_lvl > 1) {
+      printf ("Fe sink terms added\n\n");
+      fflush (stdout);
+   }
+
+   free_3d_double (dP_iron_REMIN_dP_iron_PROD);
+   free_3d_double (dP_iron_REMIN_dP_iron_FLUX_IN);
+   free_3d_double (dFe_scav_dFe);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+/* sum entries with multiple values */
+
+void
+sum_dup_vals (void)
+{
+   char *subname = "sum_dup_vals";
+   int flat_ind;
+   int coef_ind;
+   int coef_ind_dup;
+   int dup_cnt;
+
+   dup_cnt = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+      for (coef_ind = rowptr[flat_ind]; coef_ind < rowptr[flat_ind + 1]; coef_ind++)
+         for (coef_ind_dup = coef_ind + 1; coef_ind_dup < rowptr[flat_ind + 1]; coef_ind_dup++)
+            if (colind[coef_ind_dup] == colind[coef_ind]) {
+               nzval_row_wise[coef_ind] += nzval_row_wise[coef_ind_dup];
+               nzval_row_wise[coef_ind_dup] = 0.0;
+               dup_cnt++;
+            }
+   if (dbg_lvl)
+      printf ("subname = %s, dup_cnt = %d\n", subname, dup_cnt);
+}
+
+/******************************************************************************/
+
+/* remove zeros from matrix */
+
+void
+strip_matrix_zeros (void)
+{
+   char *subname = "strip_matrix_zeros";
+   int flat_ind;
+   int coef_ind_all;
+   int coef_ind_nonzero;
+
+   coef_ind_all = 0;
+   coef_ind_nonzero = 0;
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      for (; coef_ind_all < rowptr[flat_ind + 1]; coef_ind_all++)
+         if (nzval_row_wise[coef_ind_all] != 0.0) {
+            nzval_row_wise[coef_ind_nonzero] = nzval_row_wise[coef_ind_all];
+            colind[coef_ind_nonzero] = colind[coef_ind_all];
+            coef_ind_nonzero++;
+         }
+      rowptr[flat_ind + 1] = coef_ind_nonzero;
+   }
+   if (dbg_lvl)
+      printf ("subname = %s, nnz_pre = %d, nnz_new = %d\n", subname, nnz, coef_ind_nonzero);
+   nnz = coef_ind_nonzero;
+}
+
+/******************************************************************************/
+
+void
+check_matrix_diag (void)
+{
+   char *subname = "check_matrix_diag";
+   int flat_ind;
+   int coef_ind;
+
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      int diag_found = 0;
+      for (coef_ind = rowptr[flat_ind]; coef_ind < rowptr[flat_ind + 1]; coef_ind++)
+         if (colind[coef_ind] == flat_ind) {
+            diag_found = 1;
+            if (nzval_row_wise[coef_ind] == 0.0)
+               printf
+                  ("subname = %s, zero on diagonal, flat_ind = %d, flat_ind = %d, colind = %lld\n",
+                   subname, flat_ind, flat_ind, (long long) colind[coef_ind]);
+         }
+      if (!diag_found) {
+         printf ("subname = %s, no diagonal found, flat_ind = %d, flat_ind = %d, colind = ",
+                 subname, flat_ind, flat_ind);
+         for (coef_ind = rowptr[flat_ind]; coef_ind < rowptr[flat_ind + 1]; coef_ind++)
+            printf (" %lld", (long long) colind[coef_ind]);
+         putchar ('\n');
+      }
+   }
+}
+
+/******************************************************************************/
+
+void
+sort_cols_one_row (int_t len, double *nzval_row_wise_loc, int_t * colind_loc)
+{
+   int i, j;
+
+   /* use insertion sort */
+
+   for (i = 1; i < len; i++) {
+      int_t key = colind_loc[i];
+      double nzval = nzval_row_wise_loc[i];
+      for (j = i - 1; j >= 0 && colind_loc[j] > key; --j) {
+         colind_loc[j + 1] = colind_loc[j];
+         nzval_row_wise_loc[j + 1] = nzval_row_wise_loc[j];
+         colind_loc[j] = key;
+         nzval_row_wise_loc[j] = nzval;
+      }
+   }
+}
+
+/******************************************************************************/
+
+void
+sort_cols_all_rows (void)
+{
+   int flat_ind;
+
+   for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+      sort_cols_one_row (rowptr[flat_ind + 1] - rowptr[flat_ind],
+                         nzval_row_wise + rowptr[flat_ind], colind + rowptr[flat_ind]);
+}
+
+/******************************************************************************/
+
+int
+gen_sparse_matrix (int day_cnt)
+{
+   char *subname = "gen_sparse_matrix";
+
+   comp_nnz ();
+
+   delta_t = 60.0 * 60.0 * 24.0 * day_cnt;
+   year_cnt = day_cnt / 365.0;
+
+   /* allocate arrays for sparse matrix */
+   if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for nzval_row_wise\n", subname);
+      return 1;
+   }
+   if ((colind = malloc ((size_t) nnz * sizeof (int_t))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for colind\n", subname);
+      return 1;
+   }
+   if ((rowptr = malloc ((size_t) (flat_len + 1) * sizeof (int_t))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for rowptr\n", subname);
+      return 1;
+   }
+
+   if (init_matrix ())
+      return 1;
+
+   if (add_diag_sink ())
+      return 1;
+
+   if (add_adv ())
+      return 1;
+
+   if (add_hmix ())
+      return 1;
+
+   if (add_vmix ())
+      return 1;
+
+   if (pv_file_name)
+      if (add_pv ())
+         return 1;
+
+   if (d_SF_d_TRACER_file_name)
+      if (add_d_SF_d_TRACER ())
+         return 1;
+
+   if ((sink_opt == sink_tracer) && (strcmp (sink_tracer_name, "Fe") == 0))
+      if (add_sink_Fe ())
+         return 1;
+
+   sum_dup_vals ();
+
+   strip_matrix_zeros ();
+
+   check_matrix_diag ();
+
+   sort_cols_all_rows ();
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+put_sparse_matrix (char *fname)
+{
+   char *subname = "put_sparse_matrix";
+   int status;
+   int ncid;
+   int dimids[1];
+   int flat_len_p1_dimid;
+   int nnz_dimid;
+   int varid;
+
+   if ((status = nc_open (fname, NC_WRITE, &ncid)))
+      return handle_nc_error (subname, "nc_open", fname, status);
+
+   /* define new dimensions and get dimids for existing ones */
+
+   if ((status = nc_redef (ncid)))
+      return handle_nc_error (subname, "nc_redef", fname, status);
+
+   if ((status = nc_def_dim (ncid, "nnz", nnz, &nnz_dimid)))
+      return handle_nc_error (subname, "nc_def_dim", "nnz", status);
+
+   if ((status = nc_def_dim (ncid, "flat_len_p1", flat_len + 1, &flat_len_p1_dimid)))
+      return handle_nc_error (subname, "nc_def_dim", "flat_len_p1", status);
+
+   /* define new variables */
+
+   dimids[0] = nnz_dimid;
+   if ((status = nc_def_var (ncid, "nzval_row_wise", NC_DOUBLE, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "nzval_row_wise", status);
+
+   dimids[0] = nnz_dimid;
+   if ((status = nc_def_var (ncid, "colind", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "colind", status);
+
+   dimids[0] = flat_len_p1_dimid;
+   if ((status = nc_def_var (ncid, "rowptr", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "rowptr", status);
+
+   if ((status = nc_close (ncid)))
+      return handle_nc_error (subname, "nc_close", fname, status);
+
+   /* write out new variables */
+   /* copy int_t variables to an int array before writing */
+
+   if (put_var_1d_double (fname, "nzval_row_wise", nzval_row_wise))
+      return 1;
+
+   {
+      int *tmp_int_array;
+      int ind;
+      if ((tmp_int_array = malloc ((size_t) nnz * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for temp nnz int array\n", subname);
+         return 1;
+      }
+      for (ind = 0; ind < nnz; ind++)
+         tmp_int_array[ind] = colind[ind];
+      if (put_var_1d_int (fname, "colind", tmp_int_array))
+         return 1;
+      free (tmp_int_array);
+   }
+
+   {
+      int *tmp_int_array;
+      int ind;
+      if ((tmp_int_array = malloc ((size_t) (flat_len + 1) * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for (flat_len+1) nnz int array\n", subname);
+         return 1;
+      }
+      for (ind = 0; ind < flat_len + 1; ind++)
+         tmp_int_array[ind] = rowptr[ind];
+      if (put_var_1d_int (fname, "rowptr", tmp_int_array))
+         return 1;
+      free (tmp_int_array);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+get_sparse_matrix (char *fname)
+{
+   char *subname = "get_sparse_matrix";
+   int status;
+   int ncid;
+   int dimid;
+   size_t dimlen;
+
+   if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
+      return handle_nc_error (subname, "nc_open", fname, status);
+
+   if ((status = nc_inq_dimid (ncid, "nnz", &dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "nnz", status);
+
+   if ((status = nc_inq_dimlen (ncid, dimid, &dimlen)))
+      return handle_nc_error (subname, "nc_inq_dimlen", "nnz", status);
+   nnz = dimlen;
+
+   if ((status = nc_inq_dimid (ncid, "flat_len", &dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "flat_len", status);
+
+   if ((status = nc_inq_dimlen (ncid, dimid, &dimlen)))
+      return handle_nc_error (subname, "nc_inq_dimlen", "flat_len", status);
+   flat_len = dimlen;
+
+   if ((status = nc_close (ncid)))
+      return handle_nc_error (subname, "nc_close", fname, status);
+
+   if (dbg_lvl && (iam == 0)) {
+      printf ("%s: nnz = %d\n", subname, nnz);
+      printf ("%s: flat_len = %d\n", subname, flat_len);
+   }
+
+   /* allocate arrays for sparse matrix */
+
+   if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for nzval_row_wise\n", subname);
+      return 1;
+   }
+   if ((colind = malloc ((size_t) nnz * sizeof (int_t))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for colind\n", subname);
+      return 1;
+   }
+   if ((rowptr = malloc ((size_t) (flat_len + 1) * sizeof (int_t))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for rowptr\n", subname);
+      return 1;
+   }
+
+   /* read variables */
+   /* read int_t variables to an int array and copy to int_t arrays */
+
+   if (get_var_1d_double (fname, "nzval_row_wise", nzval_row_wise))
+      return 1;
+
+   {
+      int *tmp_int_array;
+      int ind;
+      if ((tmp_int_array = malloc ((size_t) nnz * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for nnz length int array\n", subname);
+         return 1;
+      }
+      if (get_var_1d_int (fname, "colind", tmp_int_array))
+         return 1;
+      for (ind = 0; ind < nnz; ind++)
+         colind[ind] = tmp_int_array[ind];
+      free (tmp_int_array);
+   }
+
+   {
+      int *tmp_int_array;
+      int ind;
+      if ((tmp_int_array = malloc ((size_t) (flat_len + 1) * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for (flat_len+1) length int array\n", subname);
+         return 1;
+      }
+      if (get_var_1d_int (fname, "rowptr", tmp_int_array))
+         return 1;
+      for (ind = 0; ind < flat_len + 1; ind++)
+         rowptr[ind] = tmp_int_array[ind];
+      free (tmp_int_array);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+void
+free_sparse_matrix (void)
+{
+   free (rowptr);
+   free (colind);
+   free (nzval_row_wise);
+}

@@ -1,0 +1,7 @@
+OBJS = file_io.o grid.o matrix.o memory.o  
+file_io.o: file_io.c file_io.h  
+gen_A.o: gen_A.c globals.h file_io.h grid.h matrix.h memory.h  
+grid.o: grid.c globals.h file_io.h memory.h grid.h  
+matrix.o: matrix.c globals.h file_io.h grid.h memory.h matrix.h  
+memory.o: memory.c memory.h  
+solve_ABglobal.o: solve_ABglobal.c globals.h file_io.h grid.h matrix.h memory.h  
