@@ -58,7 +58,13 @@ parse_cmd_line (int argc, char **argv)
             npcol = atoi (cp);
          break;
       case 'v':
-         vars = optarg;
+         /* copy optarg string, so that later use of strtok doesn't modify the argv array */
+         /* this is possibly not necessary */
+         if ((vars = malloc (strlen (optarg) + 1)) == NULL) {
+            fprintf (stderr, "malloc failed in parse_cmd_line for vars\n");
+            return 1;
+         }
+         strcpy (vars, optarg);
          break;
       case 'h':
       case '?':
@@ -211,7 +217,6 @@ main (int argc, char *argv[])
    double *berr;
 
    char *varsep = ",";
-   char *vars_writable = NULL;
    char *var = NULL;
 
    /* initialize MPI */
@@ -284,12 +289,7 @@ main (int argc, char *argv[])
       if (get_grid_dims (matrix_fname))
          exit (EXIT_FAILURE);
    }
-   if ((vars_writable = malloc (strlen (vars) + 1)) == NULL) {
-      fprintf (stderr, "malloc failed in main for vars_writable\n");
-      exit (EXIT_FAILURE);
-   }
-   strcpy (vars_writable, vars);
-   for (var = strtok (vars_writable, varsep); var; var = strtok (NULL, varsep)) {
+   for (var = strtok (vars, varsep); var; var = strtok (NULL, varsep)) {
       if (dbg_lvl && (iam == 0))
          printf ("processing variable %s\n", var);
 
@@ -319,7 +319,7 @@ main (int argc, char *argv[])
    LUstructFree (&LUstruct);
    if (iam == 0)
       free_ind_maps ();
-   free (vars_writable);
+   free (vars);
    SUPERLU_FREE (B);
    SUPERLU_FREE (berr);
 
