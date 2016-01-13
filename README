@@ -1,0 +1,24 @@
+
+This directory contains source code to solve systems of linear equations
+arising from a particular sparse approximation to the Jacobian matrix that
+arises when solving for spun-up ocean tracers with the Newton-Krylov
+method. The actual solve is performed in an external sparse solver
+library. The current implementation uses the distributed memory version
+of SuperLU.
+
+The work flow to solve the system of linear equations is
+1) create the sparse matrix, saving the matrix to a file
+2) read the matrix and solve the linear systems of equations
+
+Step 1 assumes some details of the ocean GCM discretizations, but is
+primarily independent of the sparse solver library. (The only dependency
+is the use of a typedef for long integers, int_t.) The matrix is stored
+compressed row storage format, described in matrix.c.
+
+Step 2 depends on the API of the sparse solver library being used, but
+is is primarily independent of the GCM. (The only dependency is the
+functionality of reading/writing ocean tracers from/to a file.) For
+SuperLU, there are 2 solver programs, one in which the matrix and
+vectors are are globally available on all processes (solve_ABglobal.c),
+and another where they are distributed (solve_ABdist.c).
+

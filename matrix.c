@@ -1,3 +1,51 @@
+/* functions to support handling sparse approximation to NK Jacobian
+ *
+ * primary functions for matrix handling
+ *    gen_sparse_matrix (int day_cnt) : generate the sparse matrix
+ *    put_sparse_matrix (char *fname) : write sparse matrix to a file
+ *    get_sparse_matrix (char *fname) : read sparse matrix from a file
+ *    free_sparse_matrix () : free memory associated with matrix
+ *
+ * The sparse matrix is stored in a compressed row storage format.
+ * Related variables:
+ *    nnz : number of non-zero values in matrix
+ *    nzval_row_wise : matrix values, stored row-by-row
+ *    colind : column index for each matrix value in nzval_row_wise
+ *    rowptr : index into nzval_row_wise and colind of starting location of entries for jth row
+ *
+ * related functions
+ *    comp_nnz () : compute nnz
+ *       this uses the functions adv_non_nbr_cnt, hmix_non_nbr_cnt, vmix_non_nbr_cnt, sink_non_nbr_cnt
+ *    init_matrix () : allocate matrix variables, generate colind, rowptr, and initialize nzval_row_wise to zero
+ *
+ *    add_diag_sink () : add diagonal source-sink terms to matrix
+ *    add_adv () : add advection related terms to matrix
+ *    add_hmix () : add lateral mixing related terms to matrix
+ *    add_vmix () : add vertical mixing related terms to matrix
+ *    add_pv () : add piston velocity terms to matrix
+ *    add_d_SF_d_TRACER () : add generic surface flux terms to matrix
+ *
+ *    sum_dup_vals () : combine matrix entries in a row that have the same column index
+ *    strip_matrix_zeros () : remove zeros from matrix
+ *    check_matrix_diag () : verify that matrix diagonal entries are non-zero
+ *    sort_cols_all_rows () : sort entries in a row into increasing column order
+ *
+ * Access to GCM output fields is natural with index triplets, while access to matrix
+ * is convenient with flat indexing.
+ *
+ * variables related to mapping between GCM index triplets to flat index space
+ *    flat_len : length of state vector for one tracer, i.e. number of active grid points in GCM
+ *    int3_to_flat_ind : mapping from GCM index triplets to flat index space
+ *    flat_ind_to_int3 : mapping from flat index space to GCM index triplets
+ *
+ * related functions
+ *    comp_sparse_matrix_size () : compute flat_len
+ *    gen_ind_maps () : generate index mapping variables, int3_to_flat_ind and flat_ind_to_int3
+ *    put_ind_maps (char *fname) : write index mapping variables to a file
+ *    get_ind_maps (char *fname) : read index mapping variables from a file
+ *    free_ind_maps () : free memory associated with mapping variables
+ */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
