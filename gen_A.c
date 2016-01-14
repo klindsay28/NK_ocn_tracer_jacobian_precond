@@ -16,211 +16,33 @@
 int dbg_lvl;
 int iam;
 
+char *opt_fname = NULL;
+double day_cnt;
+char *matrix_fname = NULL;
+
 /******************************************************************************/
 
 int
-parse_cmd_line (int argc, char **argv, double *day_cnt, char **matrix_fname)
+parse_cmd_line (int argc, char **argv)
 {
-   char *subname = "parse_cmd_line";
    char *usage_msg =
-      "usage: gen_matrix_file [-D dbg_lvl] [-c day_cnt] [-o adv_type,[none|donor|centered|upwind3]] [-o hmix_type,[none|const|hor_file|isop_file]] [-o vmix_type,[const|file|matrix_file]] [-o sink_type,[none|const|const_shallow|file|tracer][,rate[,depth]|,file_name,[field_name|tracer_name]]] [-o reg_fname,reg_fname] [-p pv_file_name,pv_field_name] [-s d_SF_d_TRACER_file_name,d_SF_d_TRACER_field_name] circ_fname matrix_fname";
+      "usage: gen_matrix_file [-h] [-D dbg_lvl] [-o opt_fname] circ_fname matrix_fname";
    extern char *optarg;
    extern int optind;
-   char *optstring = "D:c:o:p:s:h";
+   char *optstring = "D:o:h";
    int opt;
-   char *cp;
 
    while ((opt = getopt (argc, argv, optstring)) != -1) {
       switch (opt) {
+      case 'h':
+         fprintf (stderr, "%s\n", usage_msg);
+         return 1;
       case 'D':
          dbg_lvl = atoi (optarg);
          break;
-      case 'c':
-         *day_cnt = atof (optarg);
-         break;
       case 'o':
-         cp = strtok (optarg, ",");
-         if (strcmp (cp, "adv_type") == 0) {
-            if ((cp = strtok (NULL, ",")) == NULL) {
-               fprintf (stderr, "unspecified advection_type\n");
-               return 1;
-            }
-            if (strcmp (cp, "none") == 0)
-               adv_opt = adv_none;
-            else if (strcmp (cp, "donor") == 0)
-               adv_opt = adv_donor;
-            else if (strncmp (cp, "centered", 4) == 0)
-               adv_opt = adv_cent;
-            else if (strcmp (cp, "upwind3") == 0)
-               adv_opt = adv_upwind3;
-            else {
-               fprintf (stderr, "unknown advection_type: %s\n", cp);
-               return 1;
-            }
-         } else if (strcmp (cp, "hmix_type") == 0) {
-            if ((cp = strtok (NULL, ",")) == NULL) {
-               fprintf (stderr, "unspecified hmix_type\n");
-               return 1;
-            }
-            if (strcmp (cp, "none") == 0)
-               hmix_opt = hmix_none;
-            else if (strcmp (cp, "const") == 0)
-               hmix_opt = hmix_const;
-            else if (strcmp (cp, "hor_file") == 0)
-               hmix_opt = hmix_hor_file;
-            else if (strcmp (cp, "isop_file") == 0)
-               hmix_opt = hmix_isop_file;
-            else {
-               fprintf (stderr, "unknown hmix_type: %s\n", cp);
-               return 1;
-            }
-         } else if (strcmp (cp, "vmix_type") == 0) {
-            if ((cp = strtok (NULL, ",")) == NULL) {
-               fprintf (stderr, "unspecified vmix_type\n");
-               return 1;
-            }
-            if (strcmp (cp, "const") == 0)
-               vmix_opt = vmix_const;
-            else if (strcmp (cp, "file") == 0)
-               vmix_opt = vmix_file;
-            else if (strcmp (cp, "matrix_file") == 0)
-               vmix_opt = vmix_matrix_file;
-            else {
-               fprintf (stderr, "unknown vmix_type: %s\n", cp);
-               return 1;
-            }
-         } else if (strcmp (cp, "sink_type") == 0) {
-            if ((cp = strtok (NULL, ",")) == NULL) {
-               fprintf (stderr, "unspecified sink_type\n");
-               return 1;
-            }
-            if (strcmp (cp, "none") == 0)
-               sink_opt = sink_none;
-            else if (strcmp (cp, "const") == 0)
-               sink_opt = sink_const;
-            else if (strcmp (cp, "const_shallow") == 0)
-               sink_opt = sink_const_shallow;
-            else if (strcmp (cp, "file") == 0)
-               sink_opt = sink_file;
-            else if (strcmp (cp, "tracer") == 0)
-               sink_opt = sink_tracer;
-            else {
-               fprintf (stderr, "unknown sink_type: %s\n", cp);
-               return 1;
-            }
-            if ((sink_opt == sink_const) || (sink_opt == sink_const_shallow)) {
-               if ((cp = strtok (NULL, ",")) == NULL) {
-                  fprintf (stderr, "unspecified sink_rate\n");
-                  return 1;
-               }
-               sink_rate = atof (cp);
-               if (sink_opt == sink_const_shallow) {
-                  if ((cp = strtok (NULL, ",")) == NULL) {
-                     fprintf (stderr, "unspecified sink_depth\n");
-                     return 1;
-                  }
-                  sink_depth = atof (cp);
-               }
-            }
-            if (sink_opt == sink_file) {
-               if ((cp = strtok (NULL, ",")) == NULL) {
-                  fprintf (stderr, "unspecified sink_file_name\n");
-                  return 1;
-               }
-               if ((sink_file_name = malloc (1 + strlen (cp))) == NULL) {
-                  fprintf (stderr, "malloc failed in %s for sink_file_name\n", subname);
-                  return 1;
-               }
-               strcpy (sink_file_name, cp);
-               if ((cp = strtok (NULL, ",")) == NULL) {
-                  fprintf (stderr, "unspecified sink_field_name\n");
-                  return 1;
-               }
-               if ((sink_field_name = malloc (1 + strlen (cp))) == NULL) {
-                  fprintf (stderr, "malloc failed in %s for sink_field_name\n", subname);
-                  return 1;
-               }
-               strcpy (sink_field_name, cp);
-            }
-            if (sink_opt == sink_tracer) {
-               if ((cp = strtok (NULL, ",")) == NULL) {
-                  fprintf (stderr, "unspecified sink_file_name\n");
-                  return 1;
-               }
-               if ((sink_file_name = malloc (1 + strlen (cp))) == NULL) {
-                  fprintf (stderr, "malloc failed in %s for sink_file_name\n", subname);
-                  return 1;
-               }
-               strcpy (sink_file_name, cp);
-               if ((cp = strtok (NULL, ",")) == NULL) {
-                  fprintf (stderr, "unspecified sink_tracer_name\n");
-                  return 1;
-               }
-               if ((sink_tracer_name = malloc (1 + strlen (cp))) == NULL) {
-                  fprintf (stderr, "malloc failed in %s for sink_tracer_name\n", subname);
-                  return 1;
-               }
-               strcpy (sink_tracer_name, cp);
-               if (strcmp (sink_tracer_name, "Fe")) {
-                  fprintf (stderr,
-                           "unknown tracer name %s for sink_type == sink_tracer in %s\n",
-                           sink_tracer_name, subname);
-                  return 1;
-               }
-            }
-         } else if (strcmp (cp, "reg_fname") == 0) {
-            if ((cp = strtok (NULL, ",")) == NULL) {
-               fprintf (stderr, "unspecified reg_fname\n");
-               return 1;
-            }
-            if ((reg_fname = malloc (1 + strlen (cp))) == NULL) {
-               fprintf (stderr, "malloc failed in %s for reg_fname\n", subname);
-               return 1;
-            }
-            strcpy (reg_fname, cp);
-         } else {
-            fprintf (stderr, "unknown option string: %s\n", cp);
-            return 1;
-         }
+         opt_fname = optarg;
          break;
-      case 'p':
-         cp = strtok (optarg, ",");
-         if ((pv_file_name = malloc (1 + strlen (cp))) == NULL) {
-            fprintf (stderr, "malloc failed in %s for pv_file_name\n", subname);
-            return 1;
-         }
-         strcpy (pv_file_name, cp);
-         if ((cp = strtok (NULL, ",")) == NULL) {
-            fprintf (stderr, "unspecified pv_field_name\n");
-            return 1;
-         }
-         if ((pv_field_name = malloc (1 + strlen (cp))) == NULL) {
-            fprintf (stderr, "malloc failed in %s for pv_field_name\n", subname);
-            return 1;
-         }
-         strcpy (pv_field_name, cp);
-         break;
-      case 's':
-         cp = strtok (optarg, ",");
-         if ((d_SF_d_TRACER_file_name = malloc (1 + strlen (cp))) == NULL) {
-            fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_file_name\n", subname);
-            return 1;
-         }
-         strcpy (d_SF_d_TRACER_file_name, cp);
-         if ((cp = strtok (NULL, ",")) == NULL) {
-            fprintf (stderr, "unspecified d_SF_d_TRACER_field_name\n");
-            return 1;
-         }
-         if ((d_SF_d_TRACER_field_name = malloc (1 + strlen (cp))) == NULL) {
-            fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_field_name\n", subname);
-            return 1;
-         }
-         strcpy (d_SF_d_TRACER_field_name, cp);
-         break;
-      case 'h':
-      case '?':
-         fprintf (stderr, "%s\n", usage_msg);
-         return 1;
       default:
          fprintf (stderr, "internal error: unhandled option '-%c'\n", opt);
          return 1;
@@ -231,26 +53,15 @@ parse_cmd_line (int argc, char **argv, double *day_cnt, char **matrix_fname)
       return 1;
    }
    circ_fname = argv[optind++];
-   *matrix_fname = argv[optind++];
+   matrix_fname = argv[optind++];
    return 0;
 }
 
 /******************************************************************************/
 
-int
-main (int argc, char *argv[])
+void
+set_opt_defaults (void)
 {
-   double day_cnt;
-   char *matrix_fname = NULL;
-
-   int i;
-   int j;
-   int k;
-
-   iam = 0;
-
-   /* set defaults */
-   dbg_lvl = 0;
    day_cnt = 365.0;
    adv_opt = adv_cent;
    hmix_opt = hmix_isop_file;
@@ -258,9 +69,200 @@ main (int argc, char *argv[])
    sink_opt = sink_none;
    sink_rate = 1.0e-5;
    sink_depth = 10.0e2;
+}
 
-   if (parse_cmd_line (argc, argv, &day_cnt, &matrix_fname))
-      exit (EXIT_FAILURE);
+/******************************************************************************/
+
+int
+read_opt_file ()
+{
+   char *subname = "read_opt_file";
+   FILE *fp;
+   char *optname;
+   char *optval;
+
+#define MAX_LINE_LEN 256
+   char line[MAX_LINE_LEN];
+
+   if (opt_fname == NULL) return 0;
+
+   if ((fp = fopen(opt_fname, "r")) == NULL) {
+      fprintf (stderr, "fopen failed in %s for %s\n", subname, opt_fname);
+      return 1;
+   }
+
+   while (fgets(line, MAX_LINE_LEN, fp) != NULL) {
+      optname = strtok (line, " \n");
+      if ((optval = strtok (NULL, " \n"))  == NULL) {
+         fprintf (stderr, "unspecified value for %s\n", optname);
+         return 1;
+      }
+      if (strcmp (optname, "day_cnt") == 0) {
+         day_cnt = atof (optval);
+      } else if (strcmp (optname, "adv_type") == 0) {
+         if (strcmp (optval, "none") == 0)
+            adv_opt = adv_none;
+         else if (strcmp (optval, "donor") == 0)
+            adv_opt = adv_donor;
+         else if (strncmp (optval, "centered", 4) == 0)
+            adv_opt = adv_cent;
+         else if (strcmp (optval, "upwind3") == 0)
+            adv_opt = adv_upwind3;
+         else {
+            fprintf (stderr, "unknown adv_type: %s\n", optval);
+            return 1;
+         }
+      } else if (strcmp (optname, "hmix_type") == 0) {
+         if (strcmp (optval, "none") == 0)
+            hmix_opt = hmix_none;
+         else if (strcmp (optval, "const") == 0)
+            hmix_opt = hmix_const;
+         else if (strcmp (optval, "hor_file") == 0)
+            hmix_opt = hmix_hor_file;
+         else if (strcmp (optval, "isop_file") == 0)
+            hmix_opt = hmix_isop_file;
+         else {
+            fprintf (stderr, "unknown hmix_type: %s\n", optval);
+            return 1;
+         }
+      } else if (strcmp (optname, "vmix_type") == 0) {
+         if (strcmp (optval, "const") == 0)
+            vmix_opt = vmix_const;
+         else if (strcmp (optval, "file") == 0)
+            vmix_opt = vmix_file;
+         else if (strcmp (optval, "matrix_file") == 0)
+            vmix_opt = vmix_matrix_file;
+         else {
+            fprintf (stderr, "unknown vmix_type: %s\n", optval);
+            return 1;
+         }
+      } else if (strcmp (optname, "sink_type") == 0) {
+         if (strcmp (optval, "none") == 0)
+            sink_opt = sink_none;
+         else if (strcmp (optval, "const") == 0)
+            sink_opt = sink_const;
+         else if (strcmp (optval, "const_shallow") == 0)
+            sink_opt = sink_const_shallow;
+         else if (strcmp (optval, "file") == 0)
+            sink_opt = sink_file;
+         else if (strcmp (optval, "tracer") == 0)
+            sink_opt = sink_tracer;
+         else {
+            fprintf (stderr, "unknown sink_type: %s\n", optval);
+            return 1;
+         }
+         if ((sink_opt == sink_const) || (sink_opt == sink_const_shallow)) {
+            if ((optval = strtok (NULL, " \n")) == NULL) {
+               fprintf (stderr, "unspecified sink_rate\n");
+               return 1;
+            }
+            sink_rate = atof (optval);
+            if (sink_opt == sink_const_shallow) {
+               if ((optval = strtok (NULL, " \n")) == NULL) {
+                  fprintf (stderr, "unspecified sink_depth\n");
+                  return 1;
+               }
+               sink_depth = atof (optval);
+            }
+         }
+         if (sink_opt == sink_file) {
+            if ((optval = strtok (NULL, " \n")) == NULL) {
+               fprintf (stderr, "unspecified sink_file_name\n");
+               return 1;
+            }
+            if ((sink_file_name = malloc (1 + strlen (optval))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for sink_file_name\n", subname);
+               return 1;
+            }
+            strcpy (sink_file_name, optval);
+            if ((optval = strtok (NULL, " \n")) == NULL) {
+               fprintf (stderr, "unspecified sink_field_name\n");
+               return 1;
+            }
+            if ((sink_field_name = malloc (1 + strlen (optval))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for sink_field_name\n", subname);
+               return 1;
+            }
+            strcpy (sink_field_name, optval);
+         }
+         if (sink_opt == sink_tracer) {
+            if ((optval = strtok (NULL, " \n")) == NULL) {
+               fprintf (stderr, "unspecified sink_file_name\n");
+               return 1;
+            }
+            if ((sink_file_name = malloc (1 + strlen (optval))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for sink_file_name\n", subname);
+               return 1;
+            }
+            strcpy (sink_file_name, optval);
+            if ((optval = strtok (NULL, " \n")) == NULL) {
+               fprintf (stderr, "unspecified sink_tracer_name\n");
+               return 1;
+            }
+            if ((sink_tracer_name = malloc (1 + strlen (optval))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for sink_tracer_name\n", subname);
+               return 1;
+            }
+            strcpy (sink_tracer_name, optval);
+            if (strcmp (sink_tracer_name, "Fe")) {
+               fprintf (stderr,
+                        "unknown tracer name %s for sink_type == sink_tracer in %s\n",
+                        sink_tracer_name, subname);
+               return 1;
+            }
+         }
+      } else if (strcmp (optname, "reg_fname") == 0) {
+         if ((reg_fname = malloc (1 + strlen (optval))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for reg_fname\n", subname);
+            return 1;
+         }
+         strcpy (reg_fname, optval);
+      } else if (strcmp (optname, "pv") == 0) {
+         if ((pv_file_name = malloc (1 + strlen (optval))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for pv_file_name\n", subname);
+            return 1;
+         }
+         strcpy (pv_file_name, optval);
+         if ((optval = strtok (NULL, " \n")) == NULL) {
+            fprintf (stderr, "unspecified pv_field_name\n");
+            return 1;
+         }
+         if ((pv_field_name = malloc (1 + strlen (optval))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for pv_field_name\n", subname);
+            return 1;
+         }
+         strcpy (pv_field_name, optval);
+      } else if (strcmp (optname, "sf") == 0) {
+         if ((d_SF_d_TRACER_file_name = malloc (1 + strlen (optval))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_file_name\n", subname);
+            return 1;
+         }
+         strcpy (d_SF_d_TRACER_file_name, optval);
+         if ((optval = strtok (NULL, " \n")) == NULL) {
+            fprintf (stderr, "unspecified d_SF_d_TRACER_field_name\n");
+            return 1;
+         }
+         if ((d_SF_d_TRACER_field_name = malloc (1 + strlen (optval))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_field_name\n", subname);
+            return 1;
+         }
+         strcpy (d_SF_d_TRACER_field_name, optval);
+      } else {
+         fprintf (stderr, "unknown option name: %s\n", optname);
+         return 1;
+      }
+   }
+
+   fclose (fp);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+void
+write_opts (void)
+{
 
    if (dbg_lvl) {
       printf ("dbg_lvl                    = %d\n", dbg_lvl);
@@ -338,6 +340,25 @@ main (int argc, char *argv[])
       printf ("circ_fname                 = %s\n", circ_fname);
       printf ("matrix_fname               = %s\n\n", matrix_fname);
    }
+}
+
+/******************************************************************************/
+
+int
+main (int argc, char *argv[])
+{
+   iam = 0;
+   dbg_lvl = 0;
+
+   if (parse_cmd_line (argc, argv))
+      exit (EXIT_FAILURE);
+
+   set_opt_defaults ();
+
+   if (read_opt_file ())
+      exit (EXIT_FAILURE);
+
+   write_opts ();
 
    if (get_grid_info (circ_fname, reg_fname))
       exit (EXIT_FAILURE);
