@@ -366,7 +366,7 @@ main (int argc, char *argv[])
    if (put_grid_info (matrix_fname))
       exit (EXIT_FAILURE);
 
-   if (comp_sparse_matrix_size ())
+   if (comp_flat_len ())
       exit (EXIT_FAILURE);
 
    if (gen_ind_maps ())

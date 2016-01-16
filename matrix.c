@@ -39,7 +39,7 @@
  *    flat_ind_to_int3 : mapping from flat index space to GCM index triplets
  *
  * related functions
- *    comp_sparse_matrix_size () : compute flat_len
+ *    comp_flat_len () : compute flat_len
  *    gen_ind_maps () : generate index mapping variables, int3_to_flat_ind and flat_ind_to_int3
  *    put_ind_maps (char *fname) : write index mapping variables to a file
  *    get_ind_maps (char *fname) : read index mapping variables from a file
@@ -107,9 +107,9 @@ set_3d_double (double val, double ***FIELD)
 /******************************************************************************/
 
 int
-comp_sparse_matrix_size (void)
+comp_flat_len (void)
 {
-   char *subname = "comp_sparse_matrix_size";
+   char *subname = "comp_flat_len";
    int south_flag;
    int north_flag;
    int i;

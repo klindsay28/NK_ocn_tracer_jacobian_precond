@@ -3,7 +3,7 @@
 /* function prototypes                                                        */
 /******************************************************************************/
 
-int comp_sparse_matrix_size (void);
+int comp_flat_len (void);
 int gen_ind_maps (void);
 int put_ind_maps (char *fname);
 int get_ind_maps (char *fname);
