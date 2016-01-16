@@ -228,6 +228,7 @@ get_B_dist (char *var, double *B)
    if (iam == 0) {
       double ***field_3d;
       double *B_global;
+      int tracer_state_ind;
       int flat_ind;
       int dest;
 
@@ -246,10 +247,11 @@ get_B_dist (char *var, double *B)
          return 1;
 
       /* flatten 3D variable into B_global */
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         int i = flat_ind_to_int3[flat_ind].i;
-         int j = flat_ind_to_int3[flat_ind].j;
-         int k = flat_ind_to_int3[flat_ind].k;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         flat_ind = tracer_state_ind;
          B_global[flat_ind] = field_3d[k][j][i];
       }
 
@@ -294,6 +296,7 @@ put_B_dist (char *var, double *B)
       MPI_Status status;
       double ***field_3d;
       double *B_global;
+      int tracer_state_ind;
       int flat_ind;
       int source;
 
@@ -328,10 +331,11 @@ put_B_dist (char *var, double *B)
          return 1;
 
       /* convert flat B_global into 3D variable */
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         int i = flat_ind_to_int3[flat_ind].i;
-         int j = flat_ind_to_int3[flat_ind].j;
-         int k = flat_ind_to_int3[flat_ind].k;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         flat_ind = tracer_state_ind;
          field_3d[k][j][i] = B_global[flat_ind];
       }
 

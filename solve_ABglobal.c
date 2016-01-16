@@ -131,6 +131,7 @@ get_B_global (char *var, double *B)
 
    if (iam == 0) {
       double ***field_3d;
+      int tracer_state_ind;
       int flat_ind;
 
       /* allocate needed variables */
@@ -142,10 +143,11 @@ get_B_global (char *var, double *B)
       if (get_var_3d_double (inout_fname, var, field_3d))
          return 1;
 
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         int i = flat_ind_to_int3[flat_ind].i;
-         int j = flat_ind_to_int3[flat_ind].j;
-         int k = flat_ind_to_int3[flat_ind].k;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         flat_ind = tracer_state_ind;
          B[flat_ind] = field_3d[k][j][i];
       }
 
@@ -169,6 +171,7 @@ put_B_global (char *var, double *B)
 
    if (iam == 0) {
       double ***field_3d;
+      int tracer_state_ind;
       int flat_ind;
 
       /* allocate needed variables */
@@ -181,10 +184,11 @@ put_B_global (char *var, double *B)
       if (get_var_3d_double (inout_fname, var, field_3d))
          return 1;
 
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         int i = flat_ind_to_int3[flat_ind].i;
-         int j = flat_ind_to_int3[flat_ind].j;
-         int k = flat_ind_to_int3[flat_ind].k;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         flat_ind = tracer_state_ind;
          field_3d[k][j][i] = B[flat_ind];
       }
 

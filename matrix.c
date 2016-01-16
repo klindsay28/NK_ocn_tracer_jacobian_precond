@@ -8,12 +8,14 @@
  *
  * The sparse matrix is stored in a compressed row storage format.
  * Related variables:
+ *    flat_len : size of matrix, i.e. number of tracers x tracer_state_len
  *    nnz : number of non-zero values in matrix
  *    nzval_row_wise : matrix values, stored row-by-row
  *    colind : column index for each matrix value in nzval_row_wise
  *    rowptr : index into nzval_row_wise and colind of starting location of entries for jth row
  *
  * related functions
+ *    comp_flat_len () : compute flat_len
  *    comp_nnz () : compute nnz
  *       this uses the functions adv_non_nbr_cnt, hmix_non_nbr_cnt, vmix_non_nbr_cnt, sink_non_nbr_cnt
  *    init_matrix () : allocate matrix variables, generate colind, rowptr, and initialize nzval_row_wise to zero
@@ -31,16 +33,16 @@
  *    sort_cols_all_rows () : sort entries in a row into increasing column order
  *
  * Access to GCM output fields is natural with index triplets, while access to matrix
- * is convenient with flat indexing.
+ * is convenient with flat tracer indexing.
  *
- * variables related to mapping between GCM index triplets to flat index space
- *    flat_len : length of state vector for one tracer, i.e. number of active grid points in GCM
- *    int3_to_flat_ind : mapping from GCM index triplets to flat index space
- *    flat_ind_to_int3 : mapping from flat index space to GCM index triplets
+ * variables related to mapping between GCM index triplets to flat tracer index space
+ *    tracer_state_len : length of state vector for one tracer, i.e. number of active grid points in GCM
+ *    int3_to_tracer_state_ind : mapping from GCM index triplets to flat tracer index space
+ *    tracer_state_ind_to_int3 : mapping from flat tracer index space to GCM index triplets
  *
  * related functions
- *    comp_flat_len () : compute flat_len
- *    gen_ind_maps () : generate index mapping variables, int3_to_flat_ind and flat_ind_to_int3
+ *    comp_tracer_state_len () : compute tracer_state_len
+ *    gen_ind_maps () : generate index mapping variables, int3_to_tracer_state_ind and tracer_state_ind_to_int3
  *    put_ind_maps (char *fname) : write index mapping variables to a file
  *    get_ind_maps (char *fname) : read index mapping variables from a file
  *    free_ind_maps () : free memory associated with mapping variables
@@ -60,11 +62,12 @@
 
 #include "matrix.h"
 
-int flat_len;
-int ***int3_to_flat_ind;
-int3 *flat_ind_to_int3;
-int nnz;
+int tracer_state_len;
+int ***int3_to_tracer_state_ind;
+int3 *tracer_state_ind_to_int3;
 
+int flat_len;
+int nnz;
 double *nzval_row_wise;
 int_t *colind;
 int_t *rowptr;
@@ -107,9 +110,9 @@ set_3d_double (double val, double ***FIELD)
 /******************************************************************************/
 
 int
-comp_flat_len (void)
+comp_tracer_state_len (void)
 {
-   char *subname = "comp_flat_len";
+   char *subname = "comp_tracer_state_len";
    int south_flag;
    int north_flag;
    int i;
@@ -130,19 +133,19 @@ comp_flat_len (void)
    if (south_flag || north_flag)
       return 1;
 
-   flat_len = 0;
+   tracer_state_len = 0;
    for (j = 0; j < jmt; j++)
       for (i = 0; i < imt; i++)
-         flat_len += KMT[j][i];
+         tracer_state_len += KMT[j][i];
    if (dbg_lvl)
-      printf ("flat_len = %d\n\n", flat_len);
+      printf ("tracer_state_len = %d\n\n", tracer_state_len);
 
    return 0;
 }
 
 /******************************************************************************/
 
-/* generate mappings between model 3D indices and flat arrays */
+/* generate mappings between GCM index triplets and flat tracer index space */
 
 int
 gen_ind_maps (void)
@@ -151,17 +154,21 @@ gen_ind_maps (void)
    int i;
    int j;
    int k;
-   int flat_ind;
+   int tracer_state_ind;
 
-   if ((int3_to_flat_ind = malloc_3d_int (km, jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for int3_to_flat_ind\n", subname);
+   if (comp_tracer_state_len ()) {
+      fprintf (stderr, "comp_tracer_state_len call failed in %s\n", subname);
       return 1;
    }
-   if ((flat_ind_to_int3 = malloc ((size_t) flat_len * sizeof (int3))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for flat_ind_to_int3\n", subname);
+   if ((int3_to_tracer_state_ind = malloc_3d_int (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for int3_to_tracer_state_ind\n", subname);
       return 1;
    }
-   flat_ind = 0;
+   if ((tracer_state_ind_to_int3 = malloc ((size_t) tracer_state_len * sizeof (int3))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for tracer_state_ind_to_int3\n", subname);
+      return 1;
+   }
+   tracer_state_ind = 0;
    if (dbg_lvl > 1)
       printf ("mappings between flat and 3d indices\n");
    for (j = 0; j < jmt; j++)
@@ -169,14 +176,15 @@ gen_ind_maps (void)
          for (k = 0; k < km; k++)
             if (k < KMT[j][i]) {
                if (dbg_lvl > 1)
-                  printf ("i = %3d, j = %3d, k = %2d, flat_ind = %d\n", i, j, k, flat_ind);
-               int3_to_flat_ind[k][j][i] = flat_ind;
-               flat_ind_to_int3[flat_ind].i = i;
-               flat_ind_to_int3[flat_ind].j = j;
-               flat_ind_to_int3[flat_ind].k = k;
-               flat_ind++;
+                  printf ("i = %3d, j = %3d, k = %2d, tracer_state_ind = %d\n", i, j, k,
+                          tracer_state_ind);
+               int3_to_tracer_state_ind[k][j][i] = tracer_state_ind;
+               tracer_state_ind_to_int3[tracer_state_ind].i = i;
+               tracer_state_ind_to_int3[tracer_state_ind].j = j;
+               tracer_state_ind_to_int3[tracer_state_ind].k = k;
+               tracer_state_ind++;
             } else
-               int3_to_flat_ind[k][j][i] = -1;
+               int3_to_tracer_state_ind[k][j][i] = -1;
    if (dbg_lvl > 1) {
       putchar ('\n');
       fflush (stdout);
@@ -193,7 +201,7 @@ put_ind_maps (char *fname)
    int status;
    int ncid;
    int dimids[3];
-   int flat_len_dimid;
+   int tracer_state_len_dimid;
    int nlon_dimid;
    int nlat_dimid;
    int z_t_dimid;
@@ -209,8 +217,9 @@ put_ind_maps (char *fname)
    if ((status = nc_redef (ncid)))
       return handle_nc_error (subname, "nc_redef", fname, status);
 
-   if ((status = nc_def_dim (ncid, "flat_len", flat_len, &flat_len_dimid)))
-      return handle_nc_error (subname, "nc_def_dim", "flat_len", status);
+   if ((status =
+        nc_def_dim (ncid, "tracer_state_len", tracer_state_len, &tracer_state_len_dimid)))
+      return handle_nc_error (subname, "nc_def_dim", "tracer_state_len", status);
 
    if ((status = nc_inq_dimid (ncid, "nlon", &nlon_dimid)))
       return handle_nc_error (subname, "nc_inq_dimid", "nlon", status);
@@ -227,58 +236,61 @@ put_ind_maps (char *fname)
    dimids[1] = nlat_dimid;
    dimids[2] = nlon_dimid;
 
-   if ((status = nc_def_var (ncid, "int3_to_flat_ind", NC_INT, 3, dimids, &varid)))
-      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_ind", status);
+   if ((status = nc_def_var (ncid, "int3_to_tracer_state_ind", NC_INT, 3, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_tracer_state_ind", status);
    string = "TLONG TLAT";
    if ((status = nc_put_att_text (ncid, varid, "coordinates", strlen (string), string)))
-      return handle_nc_error (subname, "nc_put_att_text", "int3_to_flat_ind", status);
+      return handle_nc_error (subname, "nc_put_att_text", "int3_to_tracer_state_ind", status);
    attval_int = -1;
    if ((status = nc_put_att_int (ncid, varid, "_FillValue", NC_INT, 1, &attval_int)))
-      return handle_nc_error (subname, "nc_put_att_int", "int3_to_flat_ind", status);
+      return handle_nc_error (subname, "nc_put_att_int", "int3_to_tracer_state_ind", status);
    if ((status = nc_put_att_int (ncid, varid, "missing_value", NC_INT, 1, &attval_int)))
-      return handle_nc_error (subname, "nc_put_att_int", "int3_to_flat_ind", status);
+      return handle_nc_error (subname, "nc_put_att_int", "int3_to_tracer_state_ind", status);
 
-   dimids[0] = flat_len_dimid;
+   dimids[0] = tracer_state_len_dimid;
 
-   if ((status = nc_def_var (ncid, "flat_ind_to_i", NC_INT, 1, dimids, &varid)))
-      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_i", status);
+   if ((status = nc_def_var (ncid, "tracer_state_ind_to_i", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_tracer_state_i", status);
 
-   if ((status = nc_def_var (ncid, "flat_ind_to_j", NC_INT, 1, dimids, &varid)))
-      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_j", status);
+   if ((status = nc_def_var (ncid, "tracer_state_ind_to_j", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_tracer_state_j", status);
 
-   if ((status = nc_def_var (ncid, "flat_ind_to_k", NC_INT, 1, dimids, &varid)))
-      return handle_nc_error (subname, "nc_def_var", "int3_to_flat_k", status);
+   if ((status = nc_def_var (ncid, "tracer_state_ind_to_k", NC_INT, 1, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "int3_to_tracer_state_k", status);
 
    if ((status = nc_close (ncid)))
       return handle_nc_error (subname, "nc_close", fname, status);
 
    /* write out new variables */
 
-   if (put_var_3d_int (fname, "int3_to_flat_ind", int3_to_flat_ind))
+   if (put_var_3d_int (fname, "int3_to_tracer_state_ind", int3_to_tracer_state_ind))
       return 1;
 
-   /* write out flat_ind_to_[ijk] variables, first copying to a temporary contiguous array flat_ind_to_ijk */
+   /* write out tracer_state_ind_to_[ijk] variables, first copying to a temporary contiguous array tracer_state_ind_to_ijk */
    {
-      int *flat_ind_to_ijk;
-      int flat_ind;
+      int *tracer_state_ind_to_ijk;
+      int tracer_state_ind;
 
-      if ((flat_ind_to_ijk = malloc ((size_t) flat_len * sizeof (int))) == NULL) {
-         fprintf (stderr, "malloc failed in %s for flat_ind_to_ijk\n", subname);
+      if ((tracer_state_ind_to_ijk = malloc ((size_t) tracer_state_len * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for tracer_state_ind_to_ijk\n", subname);
          return 1;
       }
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         flat_ind_to_ijk[flat_ind] = flat_ind_to_int3[flat_ind].i;
-      if (put_var_1d_int (fname, "flat_ind_to_i", flat_ind_to_ijk))
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
+         tracer_state_ind_to_ijk[tracer_state_ind] =
+            tracer_state_ind_to_int3[tracer_state_ind].i;
+      if (put_var_1d_int (fname, "tracer_state_ind_to_i", tracer_state_ind_to_ijk))
          return 1;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         flat_ind_to_ijk[flat_ind] = flat_ind_to_int3[flat_ind].j;
-      if (put_var_1d_int (fname, "flat_ind_to_j", flat_ind_to_ijk))
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
+         tracer_state_ind_to_ijk[tracer_state_ind] =
+            tracer_state_ind_to_int3[tracer_state_ind].j;
+      if (put_var_1d_int (fname, "tracer_state_ind_to_j", tracer_state_ind_to_ijk))
          return 1;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         flat_ind_to_ijk[flat_ind] = flat_ind_to_int3[flat_ind].k;
-      if (put_var_1d_int (fname, "flat_ind_to_k", flat_ind_to_ijk))
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
+         tracer_state_ind_to_ijk[tracer_state_ind] =
+            tracer_state_ind_to_int3[tracer_state_ind].k;
+      if (put_var_1d_int (fname, "tracer_state_ind_to_k", tracer_state_ind_to_ijk))
          return 1;
-      free (flat_ind_to_ijk);
+      free (tracer_state_ind_to_ijk);
    }
 
    return 0;
@@ -301,60 +313,63 @@ get_ind_maps (char *fname)
    if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
       return handle_nc_error (subname, "nc_open", fname, status);
 
-   if ((status = nc_inq_dimid (ncid, "flat_len", &dimid)))
-      return handle_nc_error (subname, "nc_inq_dimid", "flat_len", status);
+   if ((status = nc_inq_dimid (ncid, "tracer_state_len", &dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "tracer_state_len", status);
 
    if ((status = nc_inq_dimlen (ncid, dimid, &dimlen)))
-      return handle_nc_error (subname, "nc_inq_dimlen", "flat_len", status);
-   flat_len = dimlen;
+      return handle_nc_error (subname, "nc_inq_dimlen", "tracer_state_len", status);
+   tracer_state_len = dimlen;
 
    if ((status = nc_close (ncid)))
       return handle_nc_error (subname, "nc_close", fname, status);
 
    if (dbg_lvl && (iam == 0)) {
-      printf ("%s: flat_len = %d\n", subname, flat_len);
+      printf ("%s: tracer_state_len = %d\n", subname, tracer_state_len);
    }
 
    /* allocate space for ind_maps */
-   if ((int3_to_flat_ind = malloc_3d_int (km, jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for int3_to_flat_ind\n", subname);
+   if ((int3_to_tracer_state_ind = malloc_3d_int (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for int3_to_tracer_state_ind\n", subname);
       return 1;
    }
-   if ((flat_ind_to_int3 = malloc ((size_t) flat_len * sizeof (int3))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for flat_ind_to_int3\n", subname);
+   if ((tracer_state_ind_to_int3 = malloc ((size_t) tracer_state_len * sizeof (int3))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for tracer_state_ind_to_int3\n", subname);
       return 1;
    }
 
    /* read variables */
-   /* read flat_ind_to_[ijk] variables to a temporary contiguous array flat_ind_to_ijk */
+   /* read tracer_state_ind_to_[ijk] variables to a temporary contiguous array tracer_state_ind_to_ijk */
 
-   if (get_var_3d_int (fname, "int3_to_flat_ind", int3_to_flat_ind))
+   if (get_var_3d_int (fname, "int3_to_tracer_state_ind", int3_to_tracer_state_ind))
       return 1;
 
    {
-      int *flat_ind_to_ijk;
-      int flat_ind;
+      int *tracer_state_ind_to_ijk;
+      int tracer_state_ind;
 
-      if ((flat_ind_to_ijk = malloc ((size_t) flat_len * sizeof (int))) == NULL) {
-         fprintf (stderr, "malloc failed in %s for flat_ind_to_ijk\n", subname);
+      if ((tracer_state_ind_to_ijk = malloc ((size_t) tracer_state_len * sizeof (int))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for tracer_state_ind_to_ijk\n", subname);
          return 1;
       }
-      if (get_var_1d_int (fname, "flat_ind_to_i", flat_ind_to_ijk))
+      if (get_var_1d_int (fname, "tracer_state_ind_to_i", tracer_state_ind_to_ijk))
          return 1;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         flat_ind_to_int3[flat_ind].i = flat_ind_to_ijk[flat_ind];
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
+         tracer_state_ind_to_int3[tracer_state_ind].i =
+            tracer_state_ind_to_ijk[tracer_state_ind];
 
-      if (get_var_1d_int (fname, "flat_ind_to_j", flat_ind_to_ijk))
+      if (get_var_1d_int (fname, "tracer_state_ind_to_j", tracer_state_ind_to_ijk))
          return 1;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         flat_ind_to_int3[flat_ind].j = flat_ind_to_ijk[flat_ind];
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
+         tracer_state_ind_to_int3[tracer_state_ind].j =
+            tracer_state_ind_to_ijk[tracer_state_ind];
 
-      if (get_var_1d_int (fname, "flat_ind_to_k", flat_ind_to_ijk))
+      if (get_var_1d_int (fname, "tracer_state_ind_to_k", tracer_state_ind_to_ijk))
          return 1;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         flat_ind_to_int3[flat_ind].k = flat_ind_to_ijk[flat_ind];
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
+         tracer_state_ind_to_int3[tracer_state_ind].k =
+            tracer_state_ind_to_ijk[tracer_state_ind];
 
-      free (flat_ind_to_ijk);
+      free (tracer_state_ind_to_ijk);
    }
 
    return 0;
@@ -365,8 +380,18 @@ get_ind_maps (char *fname)
 void
 free_ind_maps (void)
 {
-   free_3d_int (int3_to_flat_ind);
-   free (flat_ind_to_int3);
+   free_3d_int (int3_to_tracer_state_ind);
+   free (tracer_state_ind_to_int3);
+}
+
+/******************************************************************************/
+
+void
+comp_flat_len (void)
+{
+   flat_len = tracer_state_len;
+   if (dbg_lvl)
+      printf ("flat_len = %d\n\n", flat_len);
 }
 
 /******************************************************************************/
@@ -489,7 +514,7 @@ void
 comp_nnz (void)
 {
    char *subname = "comp_nnz";
-   int flat_ind;
+   int tracer_state_ind;
    int i;
    int ip1;
    int im1;
@@ -497,10 +522,10 @@ comp_nnz (void)
    int k;
 
    nnz = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -547,6 +572,7 @@ init_matrix (void)
 {
    char *subname = "init_matrix";
    int coef_ind;
+   int tracer_state_ind;
    int flat_ind;
    int i;
    int ip1;
@@ -557,11 +583,13 @@ init_matrix (void)
    int k;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+      flat_ind = tracer_state_ind;
       rowptr[flat_ind] = coef_ind;
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
       ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
@@ -569,79 +597,79 @@ init_matrix (void)
 
       /* cell itself */
       nzval_row_wise[coef_ind] = 0.0;
-      colind[coef_ind] = int3_to_flat_ind[k][j][i];
+      colind[coef_ind] = int3_to_tracer_state_ind[k][j][i];
       coef_ind++;
       /* cell 1 level shallower */
       if (k - 1 >= 0) {
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_flat_ind[k - 1][j][i];
+         colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j][i];
          coef_ind++;
       }
       /* cell 1 level deeper */
       if (k + 1 < KMT[j][i]) {
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_flat_ind[k + 1][j][i];
+         colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j][i];
          coef_ind++;
       }
       /* cell 1 unit east */
       if (k < KMT[j][ip1]) {
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_flat_ind[k][j][ip1];
+         colind[coef_ind] = int3_to_tracer_state_ind[k][j][ip1];
          coef_ind++;
       }
       /* cell 1 unit west */
       if (k < KMT[j][im1]) {
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_flat_ind[k][j][im1];
+         colind[coef_ind] = int3_to_tracer_state_ind[k][j][im1];
          coef_ind++;
       }
       /* cell 1 unit north */
       if (k < KMT[j + 1][i]) {
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_flat_ind[k][j + 1][i];
+         colind[coef_ind] = int3_to_tracer_state_ind[k][j + 1][i];
          coef_ind++;
       }
       /* cell 1 unit south */
       if (k < KMT[j - 1][i]) {
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_flat_ind[k][j - 1][i];
+         colind[coef_ind] = int3_to_tracer_state_ind[k][j - 1][i];
          coef_ind++;
       }
       if (adv_opt == adv_upwind3) {
          /* cell 2 level shallower */
          if (k - 2 >= 0) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k - 2][j][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k - 2][j][i];
             coef_ind++;
          }
          /* cell 2 level deeper */
          if (k + 2 < KMT[j][i]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k + 2][j][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k + 2][j][i];
             coef_ind++;
          }
          /* cell 2 unit east */
          if (k < KMT[j][ip2]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k][j][ip2];
+            colind[coef_ind] = int3_to_tracer_state_ind[k][j][ip2];
             coef_ind++;
          }
          /* cell 2 unit west */
          if (k < KMT[j][im2]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k][j][im2];
+            colind[coef_ind] = int3_to_tracer_state_ind[k][j][im2];
             coef_ind++;
          }
          /* cell 2 unit north */
          if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k][j + 2][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k][j + 2][i];
             coef_ind++;
          }
          /* cell 2 unit south */
          if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k][j - 2][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k][j - 2][i];
             coef_ind++;
          }
       }
@@ -649,49 +677,49 @@ init_matrix (void)
          /* shallower & east */
          if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k - 1][j][ip1];
+            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j][ip1];
             coef_ind++;
          }
          /* deeper & east */
          if (k + 1 < KMT[j][ip1]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k + 1][j][ip1];
+            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j][ip1];
             coef_ind++;
          }
          /* shallower & west */
          if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k - 1][j][im1];
+            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j][im1];
             coef_ind++;
          }
          /* deeper & west */
          if (k + 1 < KMT[j][im1]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k + 1][j][im1];
+            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j][im1];
             coef_ind++;
          }
          /* shallower & north */
          if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k - 1][j + 1][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j + 1][i];
             coef_ind++;
          }
          /* deeper & north */
          if (k + 1 < KMT[j + 1][i]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k + 1][j + 1][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j + 1][i];
             coef_ind++;
          }
          /* shallower & south */
          if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k - 1][j - 1][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j - 1][i];
             coef_ind++;
          }
          /* deeper & south */
          if (k + 1 < KMT[j - 1][i]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[k + 1][j - 1][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j - 1][i];
             coef_ind++;
          }
       }
@@ -700,7 +728,7 @@ init_matrix (void)
 
          for (kk = 0; kk < KMT[j][i]; kk++) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[kk][j][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[kk][j][i];
             coef_ind++;
          }
       }
@@ -709,7 +737,7 @@ init_matrix (void)
 
          for (kk = k - 1; kk >= 0; kk--) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_flat_ind[kk][j][i];
+            colind[coef_ind] = int3_to_tracer_state_ind[kk][j][i];
             coef_ind++;
          }
       }
@@ -721,6 +749,7 @@ init_matrix (void)
       fprintf (stderr, "coef_ind = %d\nnnz      = %d\n", coef_ind, nnz);
       return 1;
    }
+   flat_ind = tracer_state_ind;
    rowptr[flat_len] = coef_ind;
 
    return 0;
@@ -728,28 +757,28 @@ init_matrix (void)
 
 /******************************************************************************/
 
-/* from sparsity pattern, we know that coef_ind for diagonal term is rowptr[flat_ind] */
+/* from sparsity pattern, we know that coef_ind for diagonal term is rowptr[tracer_state_ind] */
 
 int
 add_diag_sink (void)
 {
    char *subname = "add_diag_sink";
-   int flat_ind;
+   int tracer_state_ind;
    double ***SINK_RATE_FIELD;
 
    switch (sink_opt) {
    case sink_none:
       break;
    case sink_const:
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         nzval_row_wise[rowptr[flat_ind]] = -year_cnt * sink_rate;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         nzval_row_wise[rowptr[tracer_state_ind]] = -year_cnt * sink_rate;
       }
       break;
    case sink_const_shallow:
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         int k = flat_ind_to_int3[flat_ind].k;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
          if (z_t[k] < sink_depth)
-            nzval_row_wise[rowptr[flat_ind]] = -year_cnt * sink_rate;
+            nzval_row_wise[rowptr[tracer_state_ind]] = -year_cnt * sink_rate;
       }
       break;
    case sink_file:
@@ -759,11 +788,11 @@ add_diag_sink (void)
       }
       if (get_var_3d_double (sink_file_name, sink_field_name, SINK_RATE_FIELD))
          return 1;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
-         int i = flat_ind_to_int3[flat_ind].i;
-         int j = flat_ind_to_int3[flat_ind].j;
-         int k = flat_ind_to_int3[flat_ind].k;
-         nzval_row_wise[rowptr[flat_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         nzval_row_wise[rowptr[tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
       }
       free_3d_double (SINK_RATE_FIELD);
       break;
@@ -948,22 +977,22 @@ void
 add_UTE_coeffs (double ***UTE)
 {
    char *subname = "add_UTE_coeffs";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
    double east_self_interp_w;
    double west_self_interp_w;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -1026,22 +1055,22 @@ void
 add_VTN_coeffs (double ***VTN)
 {
    char *subname = "add_VTN_coeffs";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
    double north_self_interp_w;
    double south_self_interp_w;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -1104,22 +1133,22 @@ void
 add_WVEL_coeffs (double ***WVEL)
 {
    char *subname = "add_WVEL_coeffs";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
    double top_self_interp_w;
    double bot_self_interp_w;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -1254,11 +1283,11 @@ void
 add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 {
    char *subname = "add_UTE_coeffs_upwind3";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -1267,9 +1296,9 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
       ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
@@ -1370,11 +1399,11 @@ void
 add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 {
    char *subname = "add_VTN_coeffs_upwind3";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -1383,9 +1412,9 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
       ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
@@ -1486,7 +1515,7 @@ int
 add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 {
    char *subname = "add_WVEL_coeffs_upwind3";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
    double *dzc_tmp;
    double *dzc;
@@ -1573,7 +1602,7 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    tdelzm[km - 1] = 0.0;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -1581,9 +1610,9 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
       int im2;
       int j;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
       ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
@@ -1761,7 +1790,7 @@ add_hmix_isop_file (void)
    double ***IRF;
    char IRF_name[64];
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((IRF = malloc_3d_double (km, jmt, imt)) == NULL) {
@@ -1779,16 +1808,16 @@ add_hmix_isop_file (void)
                return 1;
 
             coef_ind = 0;
-            for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+            for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
                int i;
                int ip1;
                int im1;
                int j;
                int k;
 
-               i = flat_ind_to_int3[flat_ind].i;
-               j = flat_ind_to_int3[flat_ind].j;
-               k = flat_ind_to_int3[flat_ind].k;
+               i = tracer_state_ind_to_int3[tracer_state_ind].i;
+               j = tracer_state_ind_to_int3[tracer_state_ind].j;
+               k = tracer_state_ind_to_int3[tracer_state_ind].k;
                ip1 = (i < imt - 1) ? i + 1 : 0;
                im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -1914,7 +1943,7 @@ add_hmix_hor_file (void)
    double **HUW;
    double **HTN;
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((KAPPA = malloc_3d_double (km, jmt, imt)) == NULL) {
@@ -1971,7 +2000,7 @@ add_hmix_hor_file (void)
       return 1;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -1983,9 +2012,9 @@ add_hmix_hor_file (void)
       double cn;
       double cs;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2079,7 +2108,7 @@ add_hmix_const (void)
    double **HUW;
    double **HTN;
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
    double ah;
 
@@ -2113,7 +2142,7 @@ add_hmix_const (void)
       return 1;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -2125,9 +2154,9 @@ add_hmix_const (void)
       double cn;
       double cs;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2248,7 +2277,7 @@ add_vmix_matrix_file (void)
    double ***vmix_matrix_var;
 
    int kprime;
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((vmix_matrix_var = malloc_3d_double (km, jmt, imt)) == NULL) {
@@ -2267,7 +2296,7 @@ add_vmix_matrix_file (void)
          return 1;
 
       coef_ind = 0;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
          int ip1;
          int im1;
@@ -2275,9 +2304,9 @@ add_vmix_matrix_file (void)
          int k;
          int kk;
 
-         i = flat_ind_to_int3[flat_ind].i;
-         j = flat_ind_to_int3[flat_ind].j;
-         k = flat_ind_to_int3[flat_ind].k;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
          ip1 = (i < imt - 1) ? i + 1 : 0;
          im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2335,7 +2364,7 @@ add_vmix_file (void)
    int j;
    int k;
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((VDC_TOTAL = malloc_3d_double (km, jmt, imt)) == NULL) {
@@ -2365,7 +2394,7 @@ add_vmix_file (void)
             VDC_TOTAL[k][j][i] += VDC_READ[k][j][i];
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -2375,9 +2404,9 @@ add_vmix_file (void)
       double ct;
       double cb;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2440,14 +2469,14 @@ void
 add_vmix_const (void)
 {
    char *subname = "add_vmix_const";
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
    double vdc;
 
    vdc = 0.1;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -2457,9 +2486,9 @@ add_vmix_const (void)
       double ct;
       double cb;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2549,7 +2578,7 @@ add_pv (void)
    char *subname = "add_pv";
    double **PV;
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((PV = malloc_2d_double (jmt, imt)) == NULL) {
@@ -2563,16 +2592,16 @@ add_pv (void)
       return 1;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2628,7 +2657,7 @@ add_d_SF_d_TRACER (void)
    char *subname = "add_d_SF_d_TRACER";
    double **d_SF_d_TRACER;
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((d_SF_d_TRACER = malloc_2d_double (jmt, imt)) == NULL) {
@@ -2642,16 +2671,16 @@ add_d_SF_d_TRACER (void)
       return 1;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
       int j;
       int k;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2711,7 +2740,7 @@ add_sink_Fe ()
 
    double f_fescav_P_iron = 1.0;
 
-   int flat_ind;
+   int tracer_state_ind;
    int coef_ind;
 
    if ((dFe_scav_dFe = malloc_3d_double (km, jmt, imt)) == NULL) {
@@ -2742,7 +2771,7 @@ add_sink_Fe ()
       return 1;
 
    coef_ind = 0;
-   for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
+   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
       int i;
       int ip1;
       int im1;
@@ -2750,9 +2779,9 @@ add_sink_Fe ()
       int k;
       int kk;
 
-      i = flat_ind_to_int3[flat_ind].i;
-      j = flat_ind_to_int3[flat_ind].j;
-      k = flat_ind_to_int3[flat_ind].k;
+      i = tracer_state_ind_to_int3[tracer_state_ind].i;
+      j = tracer_state_ind_to_int3[tracer_state_ind].j;
+      k = tracer_state_ind_to_int3[tracer_state_ind].k;
       ip1 = (i < imt - 1) ? i + 1 : 0;
       im1 = (i > 0) ? i - 1 : imt - 1;
 
@@ -2938,10 +2967,11 @@ gen_sparse_matrix (int day_cnt)
 {
    char *subname = "gen_sparse_matrix";
 
-   comp_nnz ();
-
    delta_t = 60.0 * 60.0 * 24.0 * day_cnt;
    year_cnt = day_cnt / 365.0;
+
+   comp_flat_len ();
+   comp_nnz ();
 
    /* allocate arrays for sparse matrix */
    if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
@@ -3045,6 +3075,7 @@ put_sparse_matrix (char *fname)
    if (put_var_1d_double (fname, "nzval_row_wise", nzval_row_wise))
       return 1;
 
+   /* colind is an array of type int_t, write it to a temporary arrays of type int, for safe writing to NetCDF */
    {
       int *tmp_int_array;
       int ind;
@@ -3059,6 +3090,7 @@ put_sparse_matrix (char *fname)
       free (tmp_int_array);
    }
 
+   /* rowptr is an array of type int_t, write it to a temporary arrays of type int, for safe writing to NetCDF */
    {
       int *tmp_int_array;
       int ind;
@@ -3097,12 +3129,12 @@ get_sparse_matrix (char *fname)
       return handle_nc_error (subname, "nc_inq_dimlen", "nnz", status);
    nnz = dimlen;
 
-   if ((status = nc_inq_dimid (ncid, "flat_len", &dimid)))
-      return handle_nc_error (subname, "nc_inq_dimid", "flat_len", status);
+   if ((status = nc_inq_dimid (ncid, "flat_len_p1", &dimid)))
+      return handle_nc_error (subname, "nc_inq_dimid", "flat_len_p1", status);
 
    if ((status = nc_inq_dimlen (ncid, dimid, &dimlen)))
-      return handle_nc_error (subname, "nc_inq_dimlen", "flat_len", status);
-   flat_len = dimlen;
+      return handle_nc_error (subname, "nc_inq_dimlen", "flat_len_p1", status);
+   flat_len = dimlen - 1;
 
    if ((status = nc_close (ncid)))
       return handle_nc_error (subname, "nc_close", fname, status);

@@ -84,16 +84,17 @@ read_opt_file ()
 #define MAX_LINE_LEN 256
    char line[MAX_LINE_LEN];
 
-   if (opt_fname == NULL) return 0;
+   if (opt_fname == NULL)
+      return 0;
 
-   if ((fp = fopen(opt_fname, "r")) == NULL) {
+   if ((fp = fopen (opt_fname, "r")) == NULL) {
       fprintf (stderr, "fopen failed in %s for %s\n", subname, opt_fname);
       return 1;
    }
 
-   while (fgets(line, MAX_LINE_LEN, fp) != NULL) {
+   while (fgets (line, MAX_LINE_LEN, fp) != NULL) {
       optname = strtok (line, " \n");
-      if ((optval = strtok (NULL, " \n"))  == NULL) {
+      if ((optval = strtok (NULL, " \n")) == NULL) {
          fprintf (stderr, "unspecified value for %s\n", optname);
          return 1;
       }
@@ -364,9 +365,6 @@ main (int argc, char *argv[])
       exit (EXIT_FAILURE);
 
    if (put_grid_info (matrix_fname))
-      exit (EXIT_FAILURE);
-
-   if (comp_flat_len ())
       exit (EXIT_FAILURE);
 
    if (gen_ind_maps ())

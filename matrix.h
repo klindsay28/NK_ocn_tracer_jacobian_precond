@@ -3,7 +3,6 @@
 /* function prototypes                                                        */
 /******************************************************************************/
 
-int comp_flat_len (void);
 int gen_ind_maps (void);
 int put_ind_maps (char *fname);
 int get_ind_maps (char *fname);
@@ -40,11 +39,12 @@ typedef enum
 /* external variable declarations                                             */
 /******************************************************************************/
 
-extern int flat_len;
-extern int ***int3_to_flat_ind;
-extern int3 *flat_ind_to_int3;
-extern int nnz;
+extern int tracer_state_len;
+extern int ***int3_to_tracer_state_ind;
+extern int3 *tracer_state_ind_to_int3;
 
+extern int flat_len;
+extern int nnz;
 extern double *nzval_row_wise;
 extern int_t *colind;
 extern int_t *rowptr;
