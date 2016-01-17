@@ -43,19 +43,36 @@ parse_cmd_line (int argc, char **argv)
    char *optstring = "D:n:v:h";
    int opt;
    char *cp;
+   char *cp2;
 
    while ((opt = getopt (argc, argv, optstring)) != -1) {
       switch (opt) {
+      case '?':
+      case 'h':
+         fprintf (stderr, "%s\n", usage_msg);
+         return 1;
       case 'D':
-         dbg_lvl = atoi (optarg);
+         dbg_lvl = (int) strtol (optarg, &cp, 10);
+         if (cp == optarg || *cp != '\0') {
+            fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, optarg);
+            return 1;
+         }
          break;
       case 'n':
          cp = strtok (optarg, ",");
-         nprow = atoi (cp);
+         nprow = (int) strtol (cp, &cp2, 10);
+         if (cp2 == cp || *cp2 != '\0') {
+            fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, cp);
+            return 1;
+         }
          if ((cp = strtok (NULL, ",")) == NULL)
             npcol = nprow;
          else
-            npcol = atoi (cp);
+            npcol = (int) strtol (cp, &cp2, 10);
+            if (cp2 == cp || *cp2 != '\0') {
+               fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, cp);
+               return 1;
+            }
          break;
       case 'v':
          /* copy optarg string, so that later use of strtok doesn't modify the argv array */
@@ -66,10 +83,6 @@ parse_cmd_line (int argc, char **argv)
          }
          strcpy (vars, optarg);
          break;
-      case 'h':
-      case '?':
-         fprintf (stderr, "%s\n", usage_msg);
-         return 1;
       default:
          fprintf (stderr, "internal error: unhandled option '-%c'\n", opt);
          return 1;

@@ -31,14 +31,20 @@ parse_cmd_line (int argc, char **argv)
    extern int optind;
    char *optstring = "D:o:h";
    int opt;
+   char *cp;
 
    while ((opt = getopt (argc, argv, optstring)) != -1) {
       switch (opt) {
+      case '?':
       case 'h':
          fprintf (stderr, "%s\n", usage_msg);
          return 1;
       case 'D':
-         dbg_lvl = atoi (optarg);
+         dbg_lvl = (int) strtol (optarg, &cp, 10);
+         if (cp == optarg || *cp != '\0') {
+            fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, optarg);
+            return 1;
+         }
          break;
       case 'o':
          opt_fname = optarg;
@@ -80,6 +86,7 @@ read_opt_file ()
    FILE *fp;
    char *optname;
    char *optval;
+   char *cp;
 
 #define MAX_LINE_LEN 256
    char line[MAX_LINE_LEN];
@@ -99,7 +106,11 @@ read_opt_file ()
          return 1;
       }
       if (strcmp (optname, "day_cnt") == 0) {
-         day_cnt = atof (optval);
+         day_cnt = strtod (optval, &cp);
+         if (cp == optval || *cp != '\0') {
+            fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname, optval);
+            return 1;
+         }
       } else if (strcmp (optname, "adv_type") == 0) {
          if (strcmp (optval, "none") == 0)
             adv_opt = adv_none;
@@ -157,13 +168,21 @@ read_opt_file ()
                fprintf (stderr, "unspecified sink_rate\n");
                return 1;
             }
-            sink_rate = atof (optval);
+            sink_rate = strtod (optval, &cp);
+            if (cp == optval || *cp != '\0') {
+               fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname, optval);
+               return 1;
+            }
             if (sink_opt == sink_const_shallow) {
                if ((optval = strtok (NULL, " \n")) == NULL) {
                   fprintf (stderr, "unspecified sink_depth\n");
                   return 1;
                }
-               sink_depth = atof (optval);
+               sink_depth = strtod (optval, &cp);
+               if (cp == optval || *cp != '\0') {
+                  fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname, optval);
+                  return 1;
+               }
             }
          }
          if (sink_opt == sink_file) {
