@@ -180,7 +180,8 @@ read_opt_file ()
                }
                sink_depth = strtod (optval, &cp);
                if (cp == optval || *cp != '\0') {
-                  fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname, optval);
+                  fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname,
+                           optval);
                   return 1;
                }
             }

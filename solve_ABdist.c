@@ -72,12 +72,13 @@ parse_cmd_line (int argc, char **argv)
          }
          if ((cp = strtok (NULL, ",")) == NULL)
             npcol = nprow;
-         else
+         else {
             npcol = (int) strtol (cp, &cp2, 10);
             if (cp2 == cp || *cp2 != '\0') {
                fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, cp);
                return 1;
             }
+         }
          break;
       case 'v':
          /* copy optarg string, so that later use of strtok doesn't modify the argv array */
