@@ -7,7 +7,7 @@ int gen_ind_maps (void);
 int put_ind_maps (char *fname);
 int get_ind_maps (char *fname);
 void free_ind_maps (void);
-int gen_sparse_matrix (int day_cnt);
+int gen_sparse_matrix (double day_cnt);
 int put_sparse_matrix (char *fname);
 int get_sparse_matrix (char *fname);
 void free_sparse_matrix (void);

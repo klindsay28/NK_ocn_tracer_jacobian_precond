@@ -1,7 +1,7 @@
 /* functions to support handling sparse approximation to NK Jacobian
  *
  * primary functions for matrix handling
- *    gen_sparse_matrix (int day_cnt) : generate the sparse matrix
+ *    gen_sparse_matrix (double day_cnt) : generate the sparse matrix
  *    put_sparse_matrix (char *fname) : write sparse matrix to a file
  *    get_sparse_matrix (char *fname) : read sparse matrix from a file
  *    free_sparse_matrix () : free memory associated with matrix
@@ -51,6 +51,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 
 #include "globals.h"
@@ -2966,7 +2967,7 @@ sort_cols_all_rows (void)
 /******************************************************************************/
 
 int
-gen_sparse_matrix (int day_cnt)
+gen_sparse_matrix (double day_cnt)
 {
    char *subname = "gen_sparse_matrix";
 
