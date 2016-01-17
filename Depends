@@ -1,7 +1,9 @@
-OBJS = file_io.o grid.o matrix.o memory.o  
+OBJS = file_io.o grid.o matrix.o memory.o misc.o  
 file_io.o: file_io.c file_io.h  
-gen_A.o: gen_A.c globals.h file_io.h grid.h matrix.h memory.h  
+gen_A.o: gen_A.c globals.h file_io.h grid.h matrix.h memory.h misc.h  
 grid.o: grid.c globals.h file_io.h memory.h grid.h  
 matrix.o: matrix.c globals.h file_io.h grid.h memory.h matrix.h  
 memory.o: memory.c memory.h  
-solve_ABglobal.o: solve_ABglobal.c globals.h file_io.h grid.h matrix.h memory.h  
+misc.o: misc.c misc.h  
+solve_ABdist.o: solve_ABdist.c globals.h file_io.h grid.h matrix.h memory.h misc.h  
+solve_ABglobal.o: solve_ABglobal.c globals.h file_io.h grid.h matrix.h memory.h misc.h  

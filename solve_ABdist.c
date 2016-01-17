@@ -10,6 +10,7 @@
 #include "grid.h"
 #include "matrix.h"
 #include "memory.h"
+#include "misc.h"
 
 /******************************************************************************/
 
@@ -48,7 +49,7 @@ parse_cmd_line (int argc, char **argv)
    char *optstring = "D:n:v:h";
    int opt;
    char *cp;
-   char *cp2;
+   long lval;
 
    while ((opt = getopt (argc, argv, optstring)) != -1) {
       switch (opt) {
@@ -57,27 +58,26 @@ parse_cmd_line (int argc, char **argv)
          fprintf (stderr, "%s\n", usage_msg);
          return 1;
       case 'D':
-         dbg_lvl = (int) strtol (optarg, &cp, 10);
-         if (cp == optarg || *cp != '\0') {
-            fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, optarg);
+         if (parse_to_int (optarg, &dbg_lvl)) {
+            fprintf (stderr, "error parsing argument '%s' for option '%c'\n", optarg, opt);
             return 1;
          }
          break;
       case 'n':
          cp = strtok (optarg, ",");
-         nprow = (int) strtol (cp, &cp2, 10);
-         if (cp2 == cp || *cp2 != '\0') {
-            fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, cp);
+         if (parse_to_long (cp, &lval)) {
+            fprintf (stderr, "error parsing argument '%s' for option '%c'\n", cp, opt);
             return 1;
          }
-         if ((cp = strtok (NULL, ",")) == NULL)
+         nprow = lval;
+         if ((cp = strtok (NULL, ",")) == NULL) {
             npcol = nprow;
-         else {
-            npcol = (int) strtol (cp, &cp2, 10);
-            if (cp2 == cp || *cp2 != '\0') {
-               fprintf (stderr, "error parsing '-%c' option argument '%s'\n", opt, cp);
+         } else {
+            if (parse_to_long (cp, &lval)) {
+               fprintf (stderr, "error parsing argument '%s' for option '%c'\n", cp, opt);
                return 1;
             }
+            npcol = lval;
          }
          break;
       case 'v':
