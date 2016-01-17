@@ -43,6 +43,8 @@ extern int tracer_state_len;
 extern int ***int3_to_tracer_state_ind;
 extern int3 *tracer_state_ind_to_int3;
 
+extern int coupled_tracer_cnt;
+
 extern int flat_len;
 extern int nnz;
 extern double *nzval_row_wise;

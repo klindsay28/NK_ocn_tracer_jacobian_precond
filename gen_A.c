@@ -71,6 +71,7 @@ set_opt_defaults (void)
    adv_opt = adv_cent;
    hmix_opt = hmix_isop_file;
    vmix_opt = vmix_file;
+   coupled_tracer_cnt = 1;
    sink_opt = sink_none;
    sink_rate = 1.0e-5;
    sink_depth = 10.0e2;
@@ -143,6 +144,15 @@ read_opt_file ()
             vmix_opt = vmix_matrix_file;
          else {
             fprintf (stderr, "unknown vmix_type: %s\n", optval);
+            return 1;
+         }
+      } else if (strcmp (optname, "coupled_tracer_cnt") == 0) {
+         if (parse_to_int (optarg, &coupled_tracer_cnt)) {
+            fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
+            return 1;
+         }
+         if (coupled_tracer_cnt > 1) {
+            fprintf (stderr, "coupled_tracer_cnt = %d not supported\n", coupled_tracer_cnt);
             return 1;
          }
       } else if (strcmp (optname, "sink_type") == 0) {

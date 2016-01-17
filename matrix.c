@@ -8,6 +8,7 @@
  *
  * The sparse matrix is stored in a compressed row storage format.
  * Related variables:
+ *    coupled_tracer_cnt : number of tracers
  *    flat_len : size of matrix, i.e. number of tracers x tracer_state_len
  *    nnz : number of non-zero values in matrix
  *    nzval_row_wise : matrix values, stored row-by-row
@@ -65,6 +66,8 @@
 int tracer_state_len;
 int ***int3_to_tracer_state_ind;
 int3 *tracer_state_ind_to_int3;
+
+int coupled_tracer_cnt;
 
 int flat_len;
 int nnz;
@@ -389,7 +392,7 @@ free_ind_maps (void)
 void
 comp_flat_len (void)
 {
-   flat_len = tracer_state_len;
+   flat_len = coupled_tracer_cnt * tracer_state_len;
    if (dbg_lvl)
       printf ("flat_len = %d\n\n", flat_len);
 }
@@ -3054,6 +3057,9 @@ put_sparse_matrix (char *fname)
 
    /* define new variables */
 
+   if ((status = nc_def_var (ncid, "coupled_tracer_cnt", NC_INT, 0, dimids, &varid)))
+      return handle_nc_error (subname, "nc_def_var", "coupled_tracer_cnt", status);
+
    dimids[0] = nnz_dimid;
    if ((status = nc_def_var (ncid, "nzval_row_wise", NC_DOUBLE, 1, dimids, &varid)))
       return handle_nc_error (subname, "nc_def_var", "nzval_row_wise", status);
@@ -3071,6 +3077,9 @@ put_sparse_matrix (char *fname)
 
    /* write out new variables */
    /* copy int_t variables to an int array before writing */
+
+   if (put_var_1d_int (fname, "coupled_tracer_cnt", &coupled_tracer_cnt))
+      return 1;
 
    if (put_var_1d_double (fname, "nzval_row_wise", nzval_row_wise))
       return 1;
@@ -3161,6 +3170,9 @@ get_sparse_matrix (char *fname)
 
    /* read variables */
    /* read int_t variables to an int array and copy to int_t arrays */
+
+   if (get_var_1d_int (fname, "coupled_tracer_cnt", &coupled_tracer_cnt))
+      return 1;
 
    if (get_var_1d_double (fname, "nzval_row_wise", nzval_row_wise))
       return 1;
