@@ -85,7 +85,6 @@ read_opt_file ()
    FILE *fp;
    char *optname;
    char *optval;
-   char *cp;
 
 #define MAX_LINE_LEN 256
    char line[MAX_LINE_LEN];
@@ -105,9 +104,8 @@ read_opt_file ()
          return 1;
       }
       if (strcmp (optname, "day_cnt") == 0) {
-         day_cnt = strtod (optval, &cp);
-         if (cp == optval || *cp != '\0') {
-            fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname, optval);
+         if (parse_to_double (optval, &day_cnt)) {
+            fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
             return 1;
          }
       } else if (strcmp (optname, "adv_type") == 0) {
@@ -167,9 +165,9 @@ read_opt_file ()
                fprintf (stderr, "unspecified sink_rate\n");
                return 1;
             }
-            sink_rate = strtod (optval, &cp);
-            if (cp == optval || *cp != '\0') {
-               fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname, optval);
+            if (parse_to_double (optval, &sink_rate)) {
+               fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval,
+                        optname);
                return 1;
             }
             if (sink_opt == sink_const_shallow) {
@@ -177,10 +175,9 @@ read_opt_file ()
                   fprintf (stderr, "unspecified sink_depth\n");
                   return 1;
                }
-               sink_depth = strtod (optval, &cp);
-               if (cp == optval || *cp != '\0') {
-                  fprintf (stderr, "error parsing '%s' option argument '%s'\n", optname,
-                           optval);
+               if (parse_to_double (optval, &sink_depth)) {
+                  fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval,
+                           optname);
                   return 1;
                }
             }

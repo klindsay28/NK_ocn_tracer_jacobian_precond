@@ -62,3 +62,33 @@ parse_to_int (char *str, int *val)
 
    return 0;
 }
+
+/******************************************************************************/
+
+int
+parse_to_double (char *str, double *val)
+{
+   char *subname = "parse_to_double";
+   char *cp;
+
+   if ((str == NULL) || (*str == '\0')) {
+      fprintf (stderr, "%s:nothing to parse\n", subname);
+      return 1;
+   }
+
+   errno = 0;
+
+   *val = strtod (str, &cp);
+
+   if (errno == ERANGE) {
+      fprintf (stderr, "%s:ERANGE error parsing '%s'\n", subname, str);
+      return 1;
+   }
+
+   if (*cp != '\0') {
+      fprintf (stderr, "%s:unexpected character '%c' parsing '%s'\n", subname, *cp, str);
+      return 1;
+   }
+
+   return 0;
+}
