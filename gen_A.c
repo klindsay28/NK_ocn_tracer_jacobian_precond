@@ -151,7 +151,7 @@ read_opt_file ()
             fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
             return 1;
          }
-         if (coupled_tracer_cnt != 1) {
+         if ((coupled_tracer_cnt < 1) || (coupled_tracer_cnt > 2)) {
             fprintf (stderr, "coupled_tracer_cnt = %d not supported\n", coupled_tracer_cnt);
             return 1;
          }
@@ -281,6 +281,18 @@ read_opt_file ()
    }
 
    fclose (fp);
+
+   if (coupled_tracer_cnt == 2) {
+      if (sink_opt != sink_tracer) {
+         fprintf (stderr, "coupled_tracer_cnt = 2 only supported for sink_type = tracer\n");
+         return 1;
+      }
+      if (strcmp (sink_tracer_name, "OCMIP_BGC_PO4_DOP")) {
+         fprintf (stderr,
+                  "coupled_tracer_cnt = 2 only supported for sink_tracer_name = OCMIP_BGC_PO4_DOP\n");
+         return 1;
+      }
+   }
 
    return 0;
 }
