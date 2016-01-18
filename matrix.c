@@ -85,16 +85,9 @@ hmix_opt_t hmix_opt;
 
 vmix_opt_t vmix_opt;
 
-sink_opt_t sink_opt;
-double sink_rate;
-double sink_depth;
-char *sink_file_name;
-char *sink_field_name;
-char *sink_tracer_name;
-char *pv_file_name = NULL;
-char *pv_field_name = NULL;
-char *d_SF_d_TRACER_file_name = NULL;
-char *d_SF_d_TRACER_field_name = NULL;
+per_tracer_opt_t *per_tracer_opt = NULL;
+
+coupled_tracer_opt_t coupled_tracer_opt;
 
 /******************************************************************************/
 
@@ -505,10 +498,8 @@ sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
    int cnt;
 
    cnt = 0;
-   if (sink_opt == sink_tracer) {
-      if (strcmp (sink_tracer_name, "Fe") == 0)
-         cnt = k;
-      if ((strcmp (sink_tracer_name, "OCMIP_BGC_PO4_DOP") == 0) && (tracer_ind == 0))
+   if (per_tracer_opt[tracer_ind].sink_opt == sink_tracer) {
+      if (strcmp (per_tracer_opt[tracer_ind].sink_tracer_name, "OCMIP_BGC_PO4") == 0)
          cnt = (k <= 10) ? k : 10;
    }
 
@@ -749,20 +740,11 @@ init_matrix (void)
                coef_ind++;
             }
          }
-         if (sink_opt == sink_tracer) {
-            if (strcmp (sink_tracer_name, "Fe") == 0) {
+         if (per_tracer_opt[tracer_ind].sink_opt == sink_tracer) {
+            if (strcmp (per_tracer_opt[tracer_ind].sink_tracer_name, "OCMIP_BGC_PO4") == 0) {
                int kk;
 
-               for (kk = k - 1; kk >= 0; kk--) {
-                  nzval_row_wise[coef_ind] = 0.0;
-                  colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
-                  coef_ind++;
-               }
-            }
-            if ((strcmp (sink_tracer_name, "OCMIP_BGC_PO4_DOP") == 0) && (tracer_ind == 0)) {
-               int kk;
-
-               for (kk = (k - 1 <= 10) ? k - 1 : 10; kk >= 0; kk--) {
+               for (kk = (k <= 10) ? k - 1 : 10 - 1; kk >= 0; kk--) {
                   nzval_row_wise[coef_ind] = 0.0;
                   colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
                   coef_ind++;
@@ -780,8 +762,7 @@ init_matrix (void)
       }
    }
    if (coef_ind != nnz) {
-      fprintf (stderr,
-               "internal error in %s, coef_ind != nnz after setting sparsity pattern\n",
+      fprintf (stderr, "internal error in %s, coef_ind != nnz after setting sparsity pattern\n",
                subname);
       fprintf (stderr, "coef_ind = %d\nnnz      = %d\n", coef_ind, nnz);
       return 1;
@@ -793,45 +774,55 @@ init_matrix (void)
 
 /******************************************************************************/
 
-/* from sparsity pattern, we know that coef_ind for diagonal term is rowptr[tracer_state_ind] */
+/* from sparsity pattern, we know that coef_ind for diagonal term for nth tracer is rowptr[offset + tracer_state_ind] */
 
 int
 add_diag_sink (void)
 {
    char *subname = "add_diag_sink";
+   int tracer_ind;
+   int flat_ind_offset;
    int tracer_state_ind;
    double ***SINK_RATE_FIELD;
 
-   switch (sink_opt) {
-   case sink_none:
-      break;
-   case sink_const:
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         nzval_row_wise[rowptr[tracer_state_ind]] = -year_cnt * sink_rate;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
+      switch (per_tracer_opt[tracer_ind].sink_opt) {
+      case sink_none:
+         break;
+      case sink_const:
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] =
+               -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+         }
+         break;
+      case sink_const_shallow:
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            if (z_t[k] < per_tracer_opt[tracer_ind].sink_depth)
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] =
+                  -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+         }
+         break;
+      case sink_file:
+         if ((SINK_RATE_FIELD = malloc_3d_double (km, jmt, imt)) == NULL) {
+            fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD\n", subname);
+            return 1;
+         }
+         if (get_var_3d_double
+             (per_tracer_opt[tracer_ind].sink_file_name,
+              per_tracer_opt[tracer_ind].sink_field_name, SINK_RATE_FIELD))
+            return 1;
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] =
+               -year_cnt * SINK_RATE_FIELD[k][j][i];
+         }
+         free_3d_double (SINK_RATE_FIELD);
+         break;
       }
-      break;
-   case sink_const_shallow:
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         if (z_t[k] < sink_depth)
-            nzval_row_wise[rowptr[tracer_state_ind]] = -year_cnt * sink_rate;
-      }
-      break;
-   case sink_file:
-      if ((SINK_RATE_FIELD = malloc_3d_double (km, jmt, imt)) == NULL) {
-         fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD\n", subname);
-         return 1;
-      }
-      if (get_var_3d_double (sink_file_name, sink_field_name, SINK_RATE_FIELD))
-         return 1;
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
-         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
-         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         nzval_row_wise[rowptr[tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
-      }
-      free_3d_double (SINK_RATE_FIELD);
-      break;
    }
 
    if (dbg_lvl > 1) {
@@ -1639,8 +1630,8 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 
    for (k = 0; k < km - 1; k++) {
       talfzp[k] =
-         dz[k] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dzc[k - 1] +
-                                                                     2.0 * dz[k] + dz[k + 1]);
+         dz[k] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dzc[k - 1] + 2.0 * dz[k] +
+                                                                     dz[k + 1]);
       tbetzp[k] =
          dz[k + 1] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dz[k] + dzc[k - 1]);
       tgamzp[k] =
@@ -2678,80 +2669,46 @@ int
 add_pv (void)
 {
    char *subname = "add_pv";
-   double **PV;
-
+   double **PV = NULL;
    int tracer_ind;
+   int flat_ind_offset;
    int tracer_state_ind;
-   int coef_ind;
 
-   if ((PV = malloc_2d_double (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for PV\n", subname);
-      return 1;
-   }
-   if (dbg_lvl)
-      printf ("%s: reading %s for piston velocity from %s\n", subname, pv_field_name,
-              pv_file_name);
-   if (get_var_2d_double (pv_file_name, pv_field_name, PV))
-      return 1;
-
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int i;
-         int ip1;
-         int im1;
-         int j;
-         int k;
-
-         i = tracer_state_ind_to_int3[tracer_state_ind].i;
-         j = tracer_state_ind_to_int3[tracer_state_ind].j;
-         k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         ip1 = (i < imt - 1) ? i + 1 : 0;
-         im1 = (i > 0) ? i - 1 : imt - 1;
-
-         /* cell itself */
-         if (k == 0)
-            nzval_row_wise[coef_ind] -= PV[j][i] / dz[0] * delta_t;
-         coef_ind++;
-         /* cell 1 level shallower */
-         if (k - 1 >= 0)
-            coef_ind++;
-         /* cell 1 level deeper */
-         if (k + 1 < KMT[j][i])
-            coef_ind++;
-         /* cell 1 unit east */
-         if (k < KMT[j][ip1])
-            coef_ind++;
-         /* cell 1 unit west */
-         if (k < KMT[j][im1])
-            coef_ind++;
-         /* cell 1 unit north */
-         if (k < KMT[j + 1][i])
-            coef_ind++;
-         /* cell 1 unit south */
-         if (k < KMT[j - 1][i])
-            coef_ind++;
-
-         coef_ind += adv_non_nbr_cnt (k, j, i);
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
+      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
+      if (per_tracer_opt[tracer_ind].pv_file_name) {
+         if (PV != NULL) {
+            if ((PV = malloc_2d_double (jmt, imt)) == NULL) {
+               fprintf (stderr, "malloc failed in %s for PV\n", subname);
+               return 1;
+            }
+         }
+         if (dbg_lvl)
+            printf ("%s: reading %s for piston velocity from %s\n", subname,
+                    per_tracer_opt[tracer_ind].pv_field_name,
+                    per_tracer_opt[tracer_ind].pv_file_name);
+         if (get_var_2d_double
+             (per_tracer_opt[tracer_ind].pv_file_name, per_tracer_opt[tracer_ind].pv_field_name,
+              PV))
+            return 1;
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            if (k == 0)
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] -=
+                  PV[j][i] / dz[0] * delta_t;
+         }
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 
    if (dbg_lvl > 1) {
       printf ("pv terms added\n\n");
       fflush (stdout);
    }
 
-   free_2d_double (PV);
+   if (PV != NULL)
+      free_2d_double (PV);
 
    return 0;
 }
@@ -2763,195 +2720,48 @@ add_d_SF_d_TRACER (void)
 {
    char *subname = "add_d_SF_d_TRACER";
    double **d_SF_d_TRACER;
-
    int tracer_ind;
+   int flat_ind_offset;
    int tracer_state_ind;
    int coef_ind;
 
-   if ((d_SF_d_TRACER = malloc_2d_double (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER\n", subname);
-      return 1;
-   }
-   if (dbg_lvl)
-      printf ("%s: reading %s for piston velocity from %s\n", subname, d_SF_d_TRACER_field_name,
-              d_SF_d_TRACER_file_name);
-   if (get_var_2d_double (d_SF_d_TRACER_file_name, d_SF_d_TRACER_field_name, d_SF_d_TRACER))
-      return 1;
-
    coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int i;
-         int ip1;
-         int im1;
-         int j;
-         int k;
+      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
+      if (per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name) {
 
-         i = tracer_state_ind_to_int3[tracer_state_ind].i;
-         j = tracer_state_ind_to_int3[tracer_state_ind].j;
-         k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         ip1 = (i < imt - 1) ? i + 1 : 0;
-         im1 = (i > 0) ? i - 1 : imt - 1;
-
-         /* cell itself */
-         if (k == 0)
-            nzval_row_wise[coef_ind] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
-         coef_ind++;
-         /* cell 1 level shallower */
-         if (k - 1 >= 0)
-            coef_ind++;
-         /* cell 1 level deeper */
-         if (k + 1 < KMT[j][i])
-            coef_ind++;
-         /* cell 1 unit east */
-         if (k < KMT[j][ip1])
-            coef_ind++;
-         /* cell 1 unit west */
-         if (k < KMT[j][im1])
-            coef_ind++;
-         /* cell 1 unit north */
-         if (k < KMT[j + 1][i])
-            coef_ind++;
-         /* cell 1 unit south */
-         if (k < KMT[j - 1][i])
-            coef_ind++;
-
-         coef_ind += adv_non_nbr_cnt (k, j, i);
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
+         if (d_SF_d_TRACER != NULL) {
+            if ((d_SF_d_TRACER = malloc_2d_double (jmt, imt)) == NULL) {
+               fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER\n", subname);
+               return 1;
+            }
+         }
+         if (dbg_lvl)
+            printf ("%s: reading %s for piston velocity from %s\n", subname,
+                    per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name,
+                    per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name);
+         if (get_var_2d_double
+             (per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name,
+              per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name, d_SF_d_TRACER))
+            return 1;
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            if (k == 0)
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] +=
+                  d_SF_d_TRACER[j][i] / dz[0] * delta_t;
+         }
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 
    if (dbg_lvl > 1) {
       printf ("d_SF_d_TRACER terms added\n\n");
       fflush (stdout);
    }
 
-   free_2d_double (d_SF_d_TRACER);
-
-   return 0;
-}
-
-/******************************************************************************/
-
-int
-add_sink_Fe ()
-{
-   char *subname = "add_sink_Fe";
-   double ***dFe_scav_dFe;
-   double ***dP_iron_REMIN_dP_iron_FLUX_IN;
-   double ***dP_iron_REMIN_dP_iron_PROD;
-
-   double f_fescav_P_iron = 1.0;
-
-   int tracer_state_ind;
-   int coef_ind;
-
-   if ((dFe_scav_dFe = malloc_3d_double (km, jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for dFe_scav_dFe\n", subname);
-      return 1;
-   }
-   if ((dP_iron_REMIN_dP_iron_FLUX_IN = malloc_3d_double (km, jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for dP_iron_REMIN_dP_iron_FLUX_IN\n", subname);
-      return 1;
-   }
-   if ((dP_iron_REMIN_dP_iron_PROD = malloc_3d_double (km, jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for dP_iron_REMIN_dP_iron_PROD\n", subname);
-      return 1;
-   }
-   if (dbg_lvl)
-      printf ("%s: reading dFe_scav_dFe from %s\n", subname, sink_file_name);
-   if (get_var_3d_double (sink_file_name, "dFe_scav_dFe", dFe_scav_dFe))
-      return 1;
-   if (dbg_lvl)
-      printf ("%s: reading dP_iron_REMIN_dP_iron_FLUX_IN from %s\n", subname, sink_file_name);
-   if (get_var_3d_double
-       (sink_file_name, "dP_iron_REMIN_dP_iron_FLUX_IN", dP_iron_REMIN_dP_iron_FLUX_IN))
-      return 1;
-   if (dbg_lvl)
-      printf ("%s: reading dP_iron_REMIN_dP_iron_PROD from %s\n", subname, sink_file_name);
-   if (get_var_3d_double
-       (sink_file_name, "dP_iron_REMIN_dP_iron_PROD", dP_iron_REMIN_dP_iron_PROD))
-      return 1;
-
-   coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
-      int kk;
-
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
-
-      /* cell itself, including remineralized particle Fe for bottom cell */
-      nzval_row_wise[coef_ind] -=
-         year_cnt * (1.0 -
-                     f_fescav_P_iron * dP_iron_REMIN_dP_iron_PROD[k][j][i]) *
-         dFe_scav_dFe[k][j][i];
-
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
-
-      coef_ind += adv_non_nbr_cnt (k, j, i);
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      {
-         double cum_weight = dP_iron_REMIN_dP_iron_FLUX_IN[k][j][i];
-         for (kk = k - 1; kk >= 0; kk--) {
-            nzval_row_wise[coef_ind] =
-               year_cnt * cum_weight * (1.0 -
-                                        dP_iron_REMIN_dP_iron_PROD[kk][j][i]) * dz[kk] *
-               f_fescav_P_iron * dFe_scav_dFe[kk][j][i];
-            coef_ind++;
-            cum_weight *= 1.0 - dP_iron_REMIN_dP_iron_FLUX_IN[kk][j][i] * dz[kk];
-         }
-      }
-   }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
-
-   if (dbg_lvl > 1) {
-      printf ("Fe sink terms added\n\n");
-      fflush (stdout);
-   }
-
-   free_3d_double (dP_iron_REMIN_dP_iron_PROD);
-   free_3d_double (dP_iron_REMIN_dP_iron_FLUX_IN);
-   free_3d_double (dFe_scav_dFe);
+   if (d_SF_d_TRACER != NULL)
+      free_2d_double (d_SF_d_TRACER);
 
    return 0;
 }
@@ -3114,17 +2924,11 @@ gen_sparse_matrix (double day_cnt)
    if (add_vmix ())
       return 1;
 
-   if (pv_file_name)
-      if (add_pv ())
-         return 1;
+   if (add_pv ())
+      return 1;
 
-   if (d_SF_d_TRACER_file_name)
-      if (add_d_SF_d_TRACER ())
-         return 1;
-
-   if ((sink_opt == sink_tracer) && (strcmp (sink_tracer_name, "Fe") == 0))
-      if (add_sink_Fe ())
-         return 1;
+   if (add_d_SF_d_TRACER ())
+      return 1;
 
    sum_dup_vals ();
 

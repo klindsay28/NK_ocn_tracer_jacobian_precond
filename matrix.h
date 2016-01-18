@@ -35,6 +35,24 @@ typedef enum
 typedef enum
 { sink_none, sink_const, sink_const_shallow, sink_file, sink_tracer } sink_opt_t;
 
+typedef struct
+{
+   sink_opt_t sink_opt;
+   double sink_rate;            /* loss rate, units = 1/yr */
+   double sink_depth;           /* depth threshold for sink_const_shallow, units = cm (same as model's z_t) */
+   char *sink_file_name;
+   char *sink_field_name;
+   char *sink_tracer_name;
+
+   char *pv_file_name;
+   char *pv_field_name;
+   char *d_SF_d_TRACER_file_name;
+   char *d_SF_d_TRACER_field_name;
+} per_tracer_opt_t;
+
+typedef enum
+{ coupled_tracer_none, coupled_tracer_OCMIP_BGC_PO4_DOP } coupled_tracer_opt_t;
+
 /******************************************************************************/
 /* external variable declarations                                             */
 /******************************************************************************/
@@ -57,13 +75,6 @@ extern hmix_opt_t hmix_opt;
 
 extern vmix_opt_t vmix_opt;
 
-extern sink_opt_t sink_opt;
-extern double sink_rate;
-extern double sink_depth;
-extern char *sink_file_name;
-extern char *sink_field_name;
-extern char *sink_tracer_name;
-extern char *pv_file_name;
-extern char *pv_field_name;
-extern char *d_SF_d_TRACER_file_name;
-extern char *d_SF_d_TRACER_field_name;
+extern per_tracer_opt_t *per_tracer_opt;
+
+extern coupled_tracer_opt_t coupled_tracer_opt;
