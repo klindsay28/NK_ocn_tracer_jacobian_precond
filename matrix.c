@@ -21,10 +21,10 @@
  *       this uses the functions adv_non_nbr_cnt, hmix_non_nbr_cnt, vmix_non_nbr_cnt, sink_non_nbr_cnt
  *    init_matrix () : allocate matrix variables, generate colind, rowptr, and initialize nzval_row_wise to zero
  *
- *    add_diag_sink () : add diagonal source-sink terms to matrix
  *    add_adv () : add advection related terms to matrix
  *    add_hmix () : add lateral mixing related terms to matrix
  *    add_vmix () : add vertical mixing related terms to matrix
+ *    add_diag_sink () : add diagonal source-sink terms to matrix
  *    add_pv () : add piston velocity terms to matrix
  *    add_d_SF_d_TRACER () : add generic surface flux terms to matrix
  *
@@ -758,63 +758,6 @@ init_matrix (void)
       return 1;
    }
    rowptr[flat_len] = coef_ind;
-
-   return 0;
-}
-
-/******************************************************************************/
-
-/* from sparsity pattern, we know that coef_ind for diagonal term for nth tracer is rowptr[offset + tracer_state_ind] */
-
-int
-add_diag_sink (void)
-{
-   char *subname = "add_diag_sink";
-   int tracer_ind;
-   int flat_ind_offset;
-   int tracer_state_ind;
-   double ***SINK_RATE_FIELD;
-
-   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
-      switch (per_tracer_opt[tracer_ind].sink_opt) {
-      case sink_none:
-         break;
-      case sink_const:
-         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
-         }
-         break;
-      case sink_const_shallow:
-         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-            if (z_t[k] < per_tracer_opt[tracer_ind].sink_depth)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
-         }
-         break;
-      case sink_file:
-         if ((SINK_RATE_FIELD = malloc_3d_double (km, jmt, imt)) == NULL) {
-            fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD\n", subname);
-            return 1;
-         }
-         if (get_var_3d_double
-             (per_tracer_opt[tracer_ind].sink_file_name, per_tracer_opt[tracer_ind].sink_field_name, SINK_RATE_FIELD))
-            return 1;
-         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
-            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
-            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
-         }
-         free_3d_double (SINK_RATE_FIELD);
-         break;
-      }
-   }
-
-   if (dbg_lvl > 1) {
-      printf ("diag sink added\n\n");
-      fflush (stdout);
-   }
 
    return 0;
 }
@@ -2612,6 +2555,63 @@ add_vmix (void)
 
 /******************************************************************************/
 
+/* from sparsity pattern, we know that coef_ind for diagonal term for nth tracer is rowptr[offset + tracer_state_ind] */
+
+int
+add_diag_sink (void)
+{
+   char *subname = "add_diag_sink";
+   int tracer_ind;
+   int flat_ind_offset;
+   int tracer_state_ind;
+   double ***SINK_RATE_FIELD;
+
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
+      switch (per_tracer_opt[tracer_ind].sink_opt) {
+      case sink_none:
+         break;
+      case sink_const:
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+         }
+         break;
+      case sink_const_shallow:
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            if (z_t[k] < per_tracer_opt[tracer_ind].sink_depth)
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+         }
+         break;
+      case sink_file:
+         if ((SINK_RATE_FIELD = malloc_3d_double (km, jmt, imt)) == NULL) {
+            fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD\n", subname);
+            return 1;
+         }
+         if (get_var_3d_double
+             (per_tracer_opt[tracer_ind].sink_file_name, per_tracer_opt[tracer_ind].sink_field_name, SINK_RATE_FIELD))
+            return 1;
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
+         }
+         free_3d_double (SINK_RATE_FIELD);
+         break;
+      }
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("diag sink added\n\n");
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
 int
 add_pv (void)
 {
@@ -2851,9 +2851,6 @@ gen_sparse_matrix (double day_cnt)
    if (init_matrix ())
       return 1;
 
-   if (add_diag_sink ())
-      return 1;
-
    if (add_adv ())
       return 1;
 
@@ -2861,6 +2858,9 @@ gen_sparse_matrix (double day_cnt)
       return 1;
 
    if (add_vmix ())
+      return 1;
+
+   if (add_diag_sink ())
       return 1;
 
    if (add_pv ())
