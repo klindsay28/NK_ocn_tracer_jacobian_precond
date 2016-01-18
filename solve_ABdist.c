@@ -42,8 +42,7 @@ int
 parse_cmd_line (int argc, char **argv)
 {
    char *subname = "parse_cmd_line";
-   char *usage_msg =
-      "usage: jacobian_precond [-D dbg_lvl] [-n nprow[,npcol]] [-v vars] matrix_fname inout_fname";
+   char *usage_msg = "usage: jacobian_precond [-D dbg_lvl] [-n nprow[,npcol]] [-v vars] matrix_fname inout_fname";
    extern char *optarg;
    extern int optind;
    char *optstring = "D:n:v:h";
@@ -220,8 +219,7 @@ get_sparse_matrix_dist (void)
    if (dbg_lvl > 1) {
       for (flat_ind = 0; flat_ind < flat_len_loc; flat_ind++) {
          for (nnz_ind = rowptr_loc[flat_ind]; nnz_ind < rowptr_loc[flat_ind + 1]; nnz_ind++) {
-            printf (" A : %d %lld %e\n", fst_row + flat_ind, (long long) colind_loc[nnz_ind],
-                    nzval_loc[nnz_ind]);
+            printf (" A : %d %lld %e\n", fst_row + flat_ind, (long long) colind_loc[nnz_ind], nzval_loc[nnz_ind]);
          }
       }
    }
@@ -423,8 +421,7 @@ main (int argc, char *argv[])
 
    /* create distributed compressed row matrix for A */
    dCreate_CompRowLoc_Matrix_dist (&A, flat_len, flat_len, nnz_loc, flat_len_loc, fst_row,
-                                   nzval_loc, colind_loc, rowptr_loc, SLU_NR_loc, SLU_D,
-                                   SLU_GE);
+                                   nzval_loc, colind_loc, rowptr_loc, SLU_NR_loc, SLU_D, SLU_GE);
    if (dbg_lvl && (iam == 0))
       printf ("distributed row-oriented matrix created\n");
 
@@ -457,8 +454,7 @@ main (int argc, char *argv[])
    nrhs_tmp = 0;
    PStatInit (&stat);
    printf ("calling pdgssvx\n");
-   pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs_tmp, &grid,
-            &LUstruct, &SOLVEstruct, berr, &stat, &info);
+   pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs_tmp, &grid, &LUstruct, &SOLVEstruct, berr, &stat, &info);
    if (dbg_lvl) {
       if (iam == 0)
          printf ("dgssvx info = %d\n", info);
@@ -471,8 +467,7 @@ main (int argc, char *argv[])
    if (iam == 0) {
       int flat_ind;
       for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         printf (" perm_c[%d] = %lld\n", flat_ind,
-                 (long long) (ScalePermstruct.perm_c[flat_ind]));
+         printf (" perm_c[%d] = %lld\n", flat_ind, (long long) (ScalePermstruct.perm_c[flat_ind]));
    }
 #endif
 
@@ -496,8 +491,7 @@ main (int argc, char *argv[])
 
       PStatInit (&stat);
       printf ("calling pdgssvx\n");
-      pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs, &grid,
-               &LUstruct, &SOLVEstruct, berr, &stat, &info);
+      pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs, &grid, &LUstruct, &SOLVEstruct, berr, &stat, &info);
       if (dbg_lvl) {
          if (iam == 0)
             printf ("dgssvx info = %d\n", info);

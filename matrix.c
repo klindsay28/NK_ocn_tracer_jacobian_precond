@@ -173,8 +173,7 @@ gen_ind_maps (void)
          for (k = 0; k < km; k++)
             if (k < KMT[j][i]) {
                if (dbg_lvl > 1)
-                  printf ("i = %3d, j = %3d, k = %2d, tracer_state_ind = %d\n", i, j, k,
-                          tracer_state_ind);
+                  printf ("i = %3d, j = %3d, k = %2d, tracer_state_ind = %d\n", i, j, k, tracer_state_ind);
                int3_to_tracer_state_ind[k][j][i] = tracer_state_ind;
                tracer_state_ind_to_int3[tracer_state_ind].i = i;
                tracer_state_ind_to_int3[tracer_state_ind].j = j;
@@ -214,8 +213,7 @@ put_ind_maps (char *fname)
    if ((status = nc_redef (ncid)))
       return handle_nc_error (subname, "nc_redef", fname, status);
 
-   if ((status =
-        nc_def_dim (ncid, "tracer_state_len", tracer_state_len, &tracer_state_len_dimid)))
+   if ((status = nc_def_dim (ncid, "tracer_state_len", tracer_state_len, &tracer_state_len_dimid)))
       return handle_nc_error (subname, "nc_def_dim", "tracer_state_len", status);
 
    if ((status = nc_inq_dimid (ncid, "nlon", &nlon_dimid)))
@@ -273,18 +271,15 @@ put_ind_maps (char *fname)
          return 1;
       }
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
-         tracer_state_ind_to_ijk[tracer_state_ind] =
-            tracer_state_ind_to_int3[tracer_state_ind].i;
+         tracer_state_ind_to_ijk[tracer_state_ind] = tracer_state_ind_to_int3[tracer_state_ind].i;
       if (put_var_1d_int (fname, "tracer_state_ind_to_i", tracer_state_ind_to_ijk))
          return 1;
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
-         tracer_state_ind_to_ijk[tracer_state_ind] =
-            tracer_state_ind_to_int3[tracer_state_ind].j;
+         tracer_state_ind_to_ijk[tracer_state_ind] = tracer_state_ind_to_int3[tracer_state_ind].j;
       if (put_var_1d_int (fname, "tracer_state_ind_to_j", tracer_state_ind_to_ijk))
          return 1;
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
-         tracer_state_ind_to_ijk[tracer_state_ind] =
-            tracer_state_ind_to_int3[tracer_state_ind].k;
+         tracer_state_ind_to_ijk[tracer_state_ind] = tracer_state_ind_to_int3[tracer_state_ind].k;
       if (put_var_1d_int (fname, "tracer_state_ind_to_k", tracer_state_ind_to_ijk))
          return 1;
       free (tracer_state_ind_to_ijk);
@@ -351,20 +346,17 @@ get_ind_maps (char *fname)
       if (get_var_1d_int (fname, "tracer_state_ind_to_i", tracer_state_ind_to_ijk))
          return 1;
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
-         tracer_state_ind_to_int3[tracer_state_ind].i =
-            tracer_state_ind_to_ijk[tracer_state_ind];
+         tracer_state_ind_to_int3[tracer_state_ind].i = tracer_state_ind_to_ijk[tracer_state_ind];
 
       if (get_var_1d_int (fname, "tracer_state_ind_to_j", tracer_state_ind_to_ijk))
          return 1;
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
-         tracer_state_ind_to_int3[tracer_state_ind].j =
-            tracer_state_ind_to_ijk[tracer_state_ind];
+         tracer_state_ind_to_int3[tracer_state_ind].j = tracer_state_ind_to_ijk[tracer_state_ind];
 
       if (get_var_1d_int (fname, "tracer_state_ind_to_k", tracer_state_ind_to_ijk))
          return 1;
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++)
-         tracer_state_ind_to_int3[tracer_state_ind].k =
-            tracer_state_ind_to_ijk[tracer_state_ind];
+         tracer_state_ind_to_int3[tracer_state_ind].k = tracer_state_ind_to_ijk[tracer_state_ind];
 
       free (tracer_state_ind_to_ijk);
    }
@@ -754,16 +746,14 @@ init_matrix (void)
          for (tracer_ind_2 = 0; tracer_ind_2 < tracer_state_len; tracer_ind_2++) {
             if (tracer_ind_2 != tracer_ind) {
                nzval_row_wise[coef_ind] = 0.0;
-               colind[coef_ind] =
-                  (tracer_ind_2 - 1) * tracer_state_len + int3_to_tracer_state_ind[k][j][i];
+               colind[coef_ind] = (tracer_ind_2 - 1) * tracer_state_len + int3_to_tracer_state_ind[k][j][i];
                coef_ind++;
             }
          }
       }
    }
    if (coef_ind != nnz) {
-      fprintf (stderr, "internal error in %s, coef_ind != nnz after setting sparsity pattern\n",
-               subname);
+      fprintf (stderr, "internal error in %s, coef_ind != nnz after setting sparsity pattern\n", subname);
       fprintf (stderr, "coef_ind = %d\nnnz      = %d\n", coef_ind, nnz);
       return 1;
    }
@@ -792,16 +782,14 @@ add_diag_sink (void)
          break;
       case sink_const:
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] =
-               -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
          }
          break;
       case sink_const_shallow:
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
             if (z_t[k] < per_tracer_opt[tracer_ind].sink_depth)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] =
-                  -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
          }
          break;
       case sink_file:
@@ -810,15 +798,13 @@ add_diag_sink (void)
             return 1;
          }
          if (get_var_3d_double
-             (per_tracer_opt[tracer_ind].sink_file_name,
-              per_tracer_opt[tracer_ind].sink_field_name, SINK_RATE_FIELD))
+             (per_tracer_opt[tracer_ind].sink_file_name, per_tracer_opt[tracer_ind].sink_field_name, SINK_RATE_FIELD))
             return 1;
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             int i = tracer_state_ind_to_int3[tracer_state_ind].i;
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] =
-               -year_cnt * SINK_RATE_FIELD[k][j][i];
+            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
          }
          free_3d_double (SINK_RATE_FIELD);
          break;
@@ -1039,11 +1025,9 @@ add_UTE_coeffs (double ***UTE)
 
          /* cell itself */
          if (k < KMT[j][ip1])
-            nzval_row_wise[coef_ind] -=
-               east_self_interp_w * UTE[k][j][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] -= east_self_interp_w * UTE[k][j][i] / TAREA[j][i] * delta_t;
          if (k < KMT[j][im1])
-            nzval_row_wise[coef_ind] +=
-               west_self_interp_w * UTE[k][j][im1] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += west_self_interp_w * UTE[k][j][im1] / TAREA[j][i] * delta_t;
          coef_ind++;
          /* cell 1 level shallower */
          if (k - 1 >= 0)
@@ -1053,14 +1037,12 @@ add_UTE_coeffs (double ***UTE)
             coef_ind++;
          /* cell 1 unit east */
          if (k < KMT[j][ip1]) {
-            nzval_row_wise[coef_ind] -=
-               (1.0 - east_self_interp_w) * UTE[k][j][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] -= (1.0 - east_self_interp_w) * UTE[k][j][i] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
          /* cell 1 unit west */
          if (k < KMT[j][im1]) {
-            nzval_row_wise[coef_ind] +=
-               (1.0 - west_self_interp_w) * UTE[k][j][im1] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += (1.0 - west_self_interp_w) * UTE[k][j][im1] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
          /* cell 1 unit north */
@@ -1123,11 +1105,9 @@ add_VTN_coeffs (double ***VTN)
 
          /* cell itself */
          if (k < KMT[j + 1][i])
-            nzval_row_wise[coef_ind] -=
-               north_self_interp_w * VTN[k][j][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] -= north_self_interp_w * VTN[k][j][i] / TAREA[j][i] * delta_t;
          if (k < KMT[j - 1][i])
-            nzval_row_wise[coef_ind] +=
-               south_self_interp_w * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += south_self_interp_w * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
          coef_ind++;
          /* cell 1 level shallower */
          if (k - 1 >= 0)
@@ -1143,14 +1123,12 @@ add_VTN_coeffs (double ***VTN)
             coef_ind++;
          /* cell 1 unit north */
          if (k < KMT[j + 1][i]) {
-            nzval_row_wise[coef_ind] -=
-               (1.0 - north_self_interp_w) * VTN[k][j][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] -= (1.0 - north_self_interp_w) * VTN[k][j][i] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
          /* cell 1 unit south */
          if (k < KMT[j - 1][i]) {
-            nzval_row_wise[coef_ind] +=
-               (1.0 - south_self_interp_w) * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += (1.0 - south_self_interp_w) * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
 
@@ -1214,14 +1192,12 @@ add_WVEL_coeffs (double ***WVEL)
          coef_ind++;
          /* cell 1 level shallower */
          if (k - 1 >= 0) {
-            nzval_row_wise[coef_ind] -=
-               (1.0 - top_self_interp_w) * WVEL[k][j][i] / dz[k] * delta_t;
+            nzval_row_wise[coef_ind] -= (1.0 - top_self_interp_w) * WVEL[k][j][i] / dz[k] * delta_t;
             coef_ind++;
          }
          /* cell 1 level deeper */
          if (k + 1 < KMT[j][i]) {
-            nzval_row_wise[coef_ind] +=
-               (1.0 - bot_self_interp_w) * WVEL[k + 1][j][i] / dz[k] * delta_t;
+            nzval_row_wise[coef_ind] += (1.0 - bot_self_interp_w) * WVEL[k + 1][j][i] / dz[k] * delta_t;
             coef_ind++;
          }
          /* cell 1 unit east */
@@ -1356,16 +1332,14 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
          if (k < KMT[j][im1])
             nzval_row_wise[coef_ind] -= 0.75 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
          else
-            nzval_row_wise[coef_ind] -=
-               (0.75 - 0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] -= (0.75 - 0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
          nzval_row_wise[coef_ind] -= 0.375 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
          /* advection through west face */
          nzval_row_wise[coef_ind] += 0.375 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
          if (k < KMT[j][ip1])
             nzval_row_wise[coef_ind] += 0.75 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
          else
-            nzval_row_wise[coef_ind] +=
-               (0.75 - 0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += (0.75 - 0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
          coef_ind++;
          /* cell 1 level shallower */
          if (k - 1 >= 0)
@@ -1380,8 +1354,7 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
             if (k < KMT[j][ip2])
                nzval_row_wise[coef_ind] -= 0.75 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
             else
-               nzval_row_wise[coef_ind] -=
-                  (0.75 - 0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+               nzval_row_wise[coef_ind] -= (0.75 - 0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
             /* advection through west face */
             nzval_row_wise[coef_ind] += (-0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
             coef_ind++;
@@ -1394,8 +1367,7 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
             if (k < KMT[j][im2])
                nzval_row_wise[coef_ind] += 0.75 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
             else
-               nzval_row_wise[coef_ind] +=
-                  (0.75 - 0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+               nzval_row_wise[coef_ind] += (0.75 - 0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
             nzval_row_wise[coef_ind] += 0.375 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
@@ -1478,16 +1450,14 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
          if (k < KMT[j - 1][i])
             nzval_row_wise[coef_ind] -= 0.75 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
          else
-            nzval_row_wise[coef_ind] -=
-               (0.75 - 0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] -= (0.75 - 0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
          nzval_row_wise[coef_ind] -= 0.375 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
          /* advection through south face */
          nzval_row_wise[coef_ind] += 0.375 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
          if (k < KMT[j + 1][i])
             nzval_row_wise[coef_ind] += 0.75 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
          else
-            nzval_row_wise[coef_ind] +=
-               (0.75 - 0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += (0.75 - 0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
          coef_ind++;
          /* cell 1 level shallower */
          if (k - 1 >= 0)
@@ -1508,8 +1478,7 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
             if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
                nzval_row_wise[coef_ind] -= 0.75 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
             else
-               nzval_row_wise[coef_ind] -=
-                  (0.75 - 0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+               nzval_row_wise[coef_ind] -= (0.75 - 0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
             /* advection through south face */
             nzval_row_wise[coef_ind] += (-0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
             coef_ind++;
@@ -1522,8 +1491,7 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
             if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
                nzval_row_wise[coef_ind] += 0.75 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
             else
-               nzval_row_wise[coef_ind] +=
-                  (0.75 - 0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+               nzval_row_wise[coef_ind] += (0.75 - 0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
             nzval_row_wise[coef_ind] += 0.375 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
@@ -1629,13 +1597,9 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    dzc[km] = dzc[km - 1];
 
    for (k = 0; k < km - 1; k++) {
-      talfzp[k] =
-         dz[k] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dzc[k - 1] + 2.0 * dz[k] +
-                                                                     dz[k + 1]);
-      tbetzp[k] =
-         dz[k + 1] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dz[k] + dzc[k - 1]);
-      tgamzp[k] =
-         -(dz[k] * dz[k + 1]) / (dz[k] + dzc[k - 1]) / (dz[k + 1] + dzc[k - 1] + 2.0 * dz[k]);
+      talfzp[k] = dz[k] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dzc[k - 1] + 2.0 * dz[k] + dz[k + 1]);
+      tbetzp[k] = dz[k + 1] * (2.0 * dz[k] + dzc[k - 1]) / (dz[k] + dz[k + 1]) / (dz[k] + dzc[k - 1]);
+      tgamzp[k] = -(dz[k] * dz[k + 1]) / (dz[k] + dzc[k - 1]) / (dz[k + 1] + dzc[k - 1] + 2.0 * dz[k]);
    }
    tbetzp[0] = tbetzp[0] + tgamzp[0];
    tgamzp[0] = 0.0;
@@ -1644,16 +1608,9 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    tgamzp[km - 1] = 0.0;
 
    for (k = 0; k < km - 1; k++) {
-      talfzm[k] =
-         dz[k] * (2.0 * dz[k + 1] + dzc[k + 2]) / (dz[k] + dz[k + 1]) / (dz[k + 1] +
-                                                                         dzc[k + 2]);
-      tbetzm[k] =
-         dz[k + 1] * (2.0 * dz[k + 1] + dzc[k + 2]) / (dz[k] + dz[k + 1]) / (dz[k] +
-                                                                             dzc[k + 2] +
-                                                                             2.0 * dz[k + 1]);
-      tdelzm[k] =
-         -(dz[k] * dz[k + 1]) / (dz[k + 1] + dzc[k + 2]) / (dz[k] + dzc[k + 2] +
-                                                            2.0 * dz[k + 1]);
+      talfzm[k] = dz[k] * (2.0 * dz[k + 1] + dzc[k + 2]) / (dz[k] + dz[k + 1]) / (dz[k + 1] + dzc[k + 2]);
+      tbetzm[k] = dz[k + 1] * (2.0 * dz[k + 1] + dzc[k + 2]) / (dz[k] + dz[k + 1]) / (dz[k] + dzc[k + 2] + 2.0 * dz[k + 1]);
+      tdelzm[k] = -(dz[k] * dz[k + 1]) / (dz[k + 1] + dzc[k + 2]) / (dz[k] + dzc[k + 2] + 2.0 * dz[k + 1]);
    }
    talfzm[km - 1] = 0.0;
    tbetzm[km - 1] = 0.0;
@@ -1683,8 +1640,7 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
             if (k + 1 < KMT[j][i])
                nzval_row_wise[coef_ind] -= talfzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
             else
-               nzval_row_wise[coef_ind] -=
-                  (talfzm[k - 1] + tdelzm[k - 1]) * WVEL_POS[k][j][i] / dz[k] * delta_t;
+               nzval_row_wise[coef_ind] -= (talfzm[k - 1] + tdelzm[k - 1]) * WVEL_POS[k][j][i] / dz[k] * delta_t;
             nzval_row_wise[coef_ind] -= talfzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
          }
          /* advection through bottom face */
@@ -1712,8 +1668,7 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
             if (k + 2 < KMT[j][i])
                nzval_row_wise[coef_ind] += talfzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
             else
-               nzval_row_wise[coef_ind] +=
-                  (talfzm[k] + tdelzm[k]) * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+               nzval_row_wise[coef_ind] += (talfzm[k] + tdelzm[k]) * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
             nzval_row_wise[coef_ind] += talfzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
             coef_ind++;
          }
@@ -1863,8 +1818,7 @@ add_hmix_isop_file (void)
    for (iprime = 0; iprime < 4; iprime++)
       for (jprime = 0; jprime < 3; jprime++)
          for (kprime = 0; kprime < 3; kprime++) {
-            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_%d_%d_%d", iprime + 1, jprime + 1,
-                     kprime + 1);
+            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_%d_%d_%d", iprime + 1, jprime + 1, kprime + 1);
             if (dbg_lvl)
                printf ("%s: reading %s from %s\n", subname, IRF_name, circ_fname);
             if (get_var_3d_double (circ_fname, IRF_name, IRF))
@@ -1872,8 +1826,7 @@ add_hmix_isop_file (void)
 
             coef_ind = 0;
             for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-               for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len;
-                    tracer_state_ind++) {
+               for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
                   int i;
                   int ip1;
                   int im1;
@@ -2090,25 +2043,19 @@ add_hmix_hor_file (void)
 
          /* cell 1 unit east */
          if (k < KMT[j][ip1])
-            ce =
-               0.5 * (KAPPA[k][j][i] +
-                      KAPPA[k][j][ip1]) * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
+            ce = 0.5 * (KAPPA[k][j][i] + KAPPA[k][j][ip1]) * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
          else
             ce = 0.0;
 
          /* cell 1 unit west */
          if (k < KMT[j][im1])
-            cw =
-               0.5 * (KAPPA[k][j][im1] +
-                      KAPPA[k][j][i]) * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
+            cw = 0.5 * (KAPPA[k][j][im1] + KAPPA[k][j][i]) * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
          else
             cw = 0.0;
 
          /* cell 1 unit north */
          if (k < KMT[j + 1][i])
-            cn =
-               0.5 * (KAPPA[k][j][i] +
-                      KAPPA[k][j + 1][i]) * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
+            cn = 0.5 * (KAPPA[k][j][i] + KAPPA[k][j + 1][i]) * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
          else
             cn = 0.0;
 
@@ -2685,19 +2632,15 @@ add_pv (void)
          }
          if (dbg_lvl)
             printf ("%s: reading %s for piston velocity from %s\n", subname,
-                    per_tracer_opt[tracer_ind].pv_field_name,
-                    per_tracer_opt[tracer_ind].pv_file_name);
-         if (get_var_2d_double
-             (per_tracer_opt[tracer_ind].pv_file_name, per_tracer_opt[tracer_ind].pv_field_name,
-              PV))
+                    per_tracer_opt[tracer_ind].pv_field_name, per_tracer_opt[tracer_ind].pv_file_name);
+         if (get_var_2d_double (per_tracer_opt[tracer_ind].pv_file_name, per_tracer_opt[tracer_ind].pv_field_name, PV))
             return 1;
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             int i = tracer_state_ind_to_int3[tracer_state_ind].i;
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
             if (k == 0)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] -=
-                  PV[j][i] / dz[0] * delta_t;
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] -= PV[j][i] / dz[0] * delta_t;
          }
       }
    }
@@ -2738,8 +2681,7 @@ add_d_SF_d_TRACER (void)
          }
          if (dbg_lvl)
             printf ("%s: reading %s for piston velocity from %s\n", subname,
-                    per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name,
-                    per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name);
+                    per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name, per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name);
          if (get_var_2d_double
              (per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name,
               per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name, d_SF_d_TRACER))
@@ -2749,8 +2691,7 @@ add_d_SF_d_TRACER (void)
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
             if (k == 0)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] +=
-                  d_SF_d_TRACER[j][i] / dz[0] * delta_t;
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
          }
       }
    }
@@ -2840,8 +2781,7 @@ check_matrix_diag (void)
                    subname, flat_ind, flat_ind, (long long) colind[coef_ind]);
          }
       if (!diag_found) {
-         printf ("subname = %s, no diagonal found, flat_ind = %d, flat_ind = %d, colind = ",
-                 subname, flat_ind, flat_ind);
+         printf ("subname = %s, no diagonal found, flat_ind = %d, flat_ind = %d, colind = ", subname, flat_ind, flat_ind);
          for (coef_ind = rowptr[flat_ind]; coef_ind < rowptr[flat_ind + 1]; coef_ind++)
             printf (" %lld", (long long) colind[coef_ind]);
          putchar ('\n');
@@ -2878,8 +2818,7 @@ sort_cols_all_rows (void)
    int flat_ind;
 
    for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-      sort_cols_one_row (rowptr[flat_ind + 1] - rowptr[flat_ind],
-                         nzval_row_wise + rowptr[flat_ind], colind + rowptr[flat_ind]);
+      sort_cols_one_row (rowptr[flat_ind + 1] - rowptr[flat_ind], nzval_row_wise + rowptr[flat_ind], colind + rowptr[flat_ind]);
 }
 
 /******************************************************************************/

@@ -56,8 +56,7 @@ malloc_3d_int (int km, int jmt, int imt)
       fprintf (stderr, "malloc failure for retval[0] in %s\n", subname);
       return NULL;
    }
-   if ((retval[0][0] =
-        malloc ((size_t) km * (size_t) jmt * (size_t) imt * sizeof (int))) == NULL) {
+   if ((retval[0][0] = malloc ((size_t) km * (size_t) jmt * (size_t) imt * sizeof (int))) == NULL) {
       fprintf (stderr, "malloc failure for retval[0][0] in %s\n", subname);
       return NULL;
    }
@@ -132,8 +131,7 @@ malloc_3d_double (int km, int jmt, int imt)
       fprintf (stderr, "malloc failure for retval[0] in %s\n", subname);
       return NULL;
    }
-   if ((retval[0][0] =
-        malloc ((size_t) km * (size_t) jmt * (size_t) imt * sizeof (double))) == NULL) {
+   if ((retval[0][0] = malloc ((size_t) km * (size_t) jmt * (size_t) imt * sizeof (double))) == NULL) {
       fprintf (stderr, "malloc failure for retval[0][0] in %s\n", subname);
       return NULL;
    }

@@ -37,8 +37,7 @@ int
 parse_cmd_line (int argc, char **argv)
 {
    char *subname = "parse_cmd_line";
-   char *usage_msg =
-      "usage: jacobian_precond [-D dbg_lvl] [-n nprow[,npcol]] [-v vars] matrix_fname inout_fname";
+   char *usage_msg = "usage: jacobian_precond [-D dbg_lvl] [-n nprow[,npcol]] [-v vars] matrix_fname inout_fname";
    extern char *optarg;
    extern int optind;
    char *optstring = "D:n:v:h";
@@ -116,8 +115,7 @@ get_sparse_matrix_global (void)
          return 1;
       if (dbg_lvl)
          printf ("row-oriented matrix read in\n");
-      dCompRow_to_CompCol_dist (flat_len, flat_len, nnz, nzval_row_wise, colind, rowptr,
-                                &nzval_col_wise, &rowind, &colptr);
+      dCompRow_to_CompCol_dist (flat_len, flat_len, nnz, nzval_row_wise, colind, rowptr, &nzval_col_wise, &rowind, &colptr);
       if (dbg_lvl)
          printf ("row-oriented matrix entries converted to column-oriented matrix entries\n");
       free_sparse_matrix ();
@@ -264,8 +262,7 @@ main (int argc, char *argv[])
       exit (EXIT_FAILURE);
 
    /* create compressed column matrix for A */
-   dCreate_CompCol_Matrix_dist (&A, flat_len, flat_len, nnz, nzval_col_wise, rowind, colptr,
-                                SLU_NC, SLU_D, SLU_GE);
+   dCreate_CompCol_Matrix_dist (&A, flat_len, flat_len, nnz, nzval_col_wise, rowind, colptr, SLU_NC, SLU_D, SLU_GE);
    if (dbg_lvl && (iam == 0))
       printf ("column-oriented matrix created\n");
 
@@ -289,8 +286,7 @@ main (int argc, char *argv[])
    nrhs_tmp = 0;
    PStatInit (&stat);
    printf ("calling pdgssvx_ABglobal\n");
-   pdgssvx_ABglobal (&options, &A, &ScalePermstruct, B, flat_len, nrhs_tmp, &grid,
-                     &LUstruct, berr, &stat, &info);
+   pdgssvx_ABglobal (&options, &A, &ScalePermstruct, B, flat_len, nrhs_tmp, &grid, &LUstruct, berr, &stat, &info);
    if (dbg_lvl) {
       if (iam == 0)
          printf ("dgssvx info = %d\n", info);
@@ -316,8 +312,7 @@ main (int argc, char *argv[])
 
       PStatInit (&stat);
       printf ("calling pdgssvx_ABglobal\n");
-      pdgssvx_ABglobal (&options, &A, &ScalePermstruct, B, flat_len, nrhs, &grid,
-                        &LUstruct, berr, &stat, &info);
+      pdgssvx_ABglobal (&options, &A, &ScalePermstruct, B, flat_len, nrhs, &grid, &LUstruct, berr, &stat, &info);
       if (dbg_lvl) {
          if (iam == 0)
             printf ("dgssvx info = %d\n", info);

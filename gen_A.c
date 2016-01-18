@@ -26,8 +26,7 @@ char *matrix_fname = NULL;
 int
 parse_cmd_line (int argc, char **argv)
 {
-   char *usage_msg =
-      "usage: gen_matrix_file [-h] [-D dbg_lvl] [-o opt_fname] circ_fname matrix_fname";
+   char *usage_msg = "usage: gen_matrix_file [-h] [-D dbg_lvl] [-o opt_fname] circ_fname matrix_fname";
    extern char *optarg;
    extern int optind;
    char *optstring = "D:o:h";
@@ -70,8 +69,7 @@ grow_per_tracer_opt (int prev_tracer_cnt, int new_tracer_cnt)
    char *subname = "grow_per_tracer_opt";
    int tracer_ind;
 
-   if ((per_tracer_opt =
-        realloc (per_tracer_opt, (size_t) new_tracer_cnt * sizeof (sink_opt_t))) == NULL) {
+   if ((per_tracer_opt = realloc (per_tracer_opt, (size_t) new_tracer_cnt * sizeof (sink_opt_t))) == NULL) {
       fprintf (stderr, "realloc failed in %s for grow_per_tracer_opt\n", subname);
       return 1;
    }
@@ -209,8 +207,7 @@ read_opt_file ()
             return 1;
          }
          if ((tracer_ind < 0) || (tracer_ind >= coupled_tracer_cnt)) {
-            fprintf (stderr, "tracer_ind = %d out of bounds for coupled_tracer_cnt = %d\n",
-                     tracer_ind, coupled_tracer_cnt);
+            fprintf (stderr, "tracer_ind = %d out of bounds for coupled_tracer_cnt = %d\n", tracer_ind, coupled_tracer_cnt);
             return 1;
          }
       } else if (strcmp (optname, "sink_type") == 0) {
@@ -235,8 +232,7 @@ read_opt_file ()
                return 1;
             }
             if (parse_to_double (optval, &per_tracer_opt[tracer_ind].sink_rate)) {
-               fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval,
-                        optname);
+               fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
                return 1;
             }
             if (per_tracer_opt[tracer_ind].sink_opt == sink_const_shallow) {
@@ -245,8 +241,7 @@ read_opt_file ()
                   return 1;
                }
                if (parse_to_double (optval, &per_tracer_opt[tracer_ind].sink_depth)) {
-                  fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval,
-                           optname);
+                  fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
                   return 1;
                }
             }
@@ -256,8 +251,7 @@ read_opt_file ()
                fprintf (stderr, "unspecified sink_file_name\n");
                return 1;
             }
-            if ((per_tracer_opt[tracer_ind].sink_file_name =
-                 malloc (1 + strlen (optval))) == NULL) {
+            if ((per_tracer_opt[tracer_ind].sink_file_name = malloc (1 + strlen (optval))) == NULL) {
                fprintf (stderr, "malloc failed in %s for sink_file_name\n", subname);
                return 1;
             }
@@ -266,8 +260,7 @@ read_opt_file ()
                fprintf (stderr, "unspecified sink_field_name\n");
                return 1;
             }
-            if ((per_tracer_opt[tracer_ind].sink_field_name =
-                 malloc (1 + strlen (optval))) == NULL) {
+            if ((per_tracer_opt[tracer_ind].sink_field_name = malloc (1 + strlen (optval))) == NULL) {
                fprintf (stderr, "malloc failed in %s for sink_field_name\n", subname);
                return 1;
             }
@@ -278,8 +271,7 @@ read_opt_file ()
                fprintf (stderr, "unspecified sink_file_name\n");
                return 1;
             }
-            if ((per_tracer_opt[tracer_ind].sink_file_name =
-                 malloc (1 + strlen (optval))) == NULL) {
+            if ((per_tracer_opt[tracer_ind].sink_file_name = malloc (1 + strlen (optval))) == NULL) {
                fprintf (stderr, "malloc failed in %s for sink_file_name\n", subname);
                return 1;
             }
@@ -288,8 +280,7 @@ read_opt_file ()
                fprintf (stderr, "unspecified sink_tracer_name\n");
                return 1;
             }
-            if ((per_tracer_opt[tracer_ind].sink_tracer_name =
-                 malloc (1 + strlen (optval))) == NULL) {
+            if ((per_tracer_opt[tracer_ind].sink_tracer_name = malloc (1 + strlen (optval))) == NULL) {
                fprintf (stderr, "malloc failed in %s for sink_tracer_name\n", subname);
                return 1;
             }
@@ -316,8 +307,7 @@ read_opt_file ()
          }
          strcpy (per_tracer_opt[tracer_ind].pv_field_name, optval);
       } else if (strcmp (optname, "sf") == 0) {
-         if ((per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name =
-              malloc (1 + strlen (optval))) == NULL) {
+         if ((per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name = malloc (1 + strlen (optval))) == NULL) {
             fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_file_name\n", subname);
             return 1;
          }
@@ -326,8 +316,7 @@ read_opt_file ()
             fprintf (stderr, "unspecified d_SF_d_TRACER_field_name\n");
             return 1;
          }
-         if ((per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name =
-              malloc (1 + strlen (optval))) == NULL) {
+         if ((per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name = malloc (1 + strlen (optval))) == NULL) {
             fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_field_name\n", subname);
             return 1;
          }
@@ -351,8 +340,7 @@ read_opt_file ()
 
    if (coupled_tracer_cnt == 2) {
       if (coupled_tracer_opt != coupled_tracer_OCMIP_BGC_PO4_DOP) {
-         fprintf (stderr,
-                  "coupled_tracer_cnt = 2 only supported for coupled_tracer_type = OCMIP_BGC_PO4_DOP\n");
+         fprintf (stderr, "coupled_tracer_cnt = 2 only supported for coupled_tracer_type = OCMIP_BGC_PO4_DOP\n");
          return 1;
       }
    }
@@ -427,25 +415,19 @@ write_opts (void)
             break;
          case sink_file:
             printf ("   sink_opt                = %s\n", "file");
-            printf ("   sink_file_name          = %s\n",
-                    per_tracer_opt[tracer_ind].sink_file_name);
-            printf ("   sink_field_name         = %s\n",
-                    per_tracer_opt[tracer_ind].sink_field_name);
+            printf ("   sink_file_name          = %s\n", per_tracer_opt[tracer_ind].sink_file_name);
+            printf ("   sink_field_name         = %s\n", per_tracer_opt[tracer_ind].sink_field_name);
             break;
          case sink_tracer:
             printf ("   sink_opt                = %s\n", "tracer");
-            printf ("   sink_file_name          = %s\n",
-                    per_tracer_opt[tracer_ind].sink_file_name);
-            printf ("   sink_tracer_name        = %s\n",
-                    per_tracer_opt[tracer_ind].sink_tracer_name);
+            printf ("   sink_file_name          = %s\n", per_tracer_opt[tracer_ind].sink_file_name);
+            printf ("   sink_tracer_name        = %s\n", per_tracer_opt[tracer_ind].sink_tracer_name);
             break;
          }
          printf ("   pv_file_name            = %s\n",
-                 per_tracer_opt[tracer_ind].
-                 pv_file_name ? per_tracer_opt[tracer_ind].pv_file_name : "none");
+                 per_tracer_opt[tracer_ind].pv_file_name ? per_tracer_opt[tracer_ind].pv_file_name : "none");
          printf ("   pv_field_name           = %s\n",
-                 per_tracer_opt[tracer_ind].
-                 pv_field_name ? per_tracer_opt[tracer_ind].pv_field_name : "none");
+                 per_tracer_opt[tracer_ind].pv_field_name ? per_tracer_opt[tracer_ind].pv_field_name : "none");
          printf ("   d_SF_d_TRACER_file_name = %s\n",
                  per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name ?
                  per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name : "none");

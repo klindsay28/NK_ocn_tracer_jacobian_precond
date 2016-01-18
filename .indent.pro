@@ -1,1 +1,1 @@
- -i3 -br -ce -l 96 -nut
+ -i3 -br -ce -l 128 -nut
