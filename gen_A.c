@@ -151,7 +151,7 @@ read_opt_file ()
             fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
             return 1;
          }
-         if (coupled_tracer_cnt > 1) {
+         if (coupled_tracer_cnt != 1) {
             fprintf (stderr, "coupled_tracer_cnt = %d not supported\n", coupled_tracer_cnt);
             return 1;
          }
@@ -231,9 +231,9 @@ read_opt_file ()
                return 1;
             }
             strcpy (sink_tracer_name, optval);
-            if (strcmp (sink_tracer_name, "Fe")) {
-               fprintf (stderr,
-                        "unknown tracer name %s for sink_type == sink_tracer in %s\n",
+            if (strcmp (sink_tracer_name, "Fe")
+                && strcmp (sink_tracer_name, "OCMIP_BGC_PO4_DOP")) {
+               fprintf (stderr, "unknown tracer name %s for sink_type == sink_tracer in %s\n",
                         sink_tracer_name, subname);
                return 1;
             }

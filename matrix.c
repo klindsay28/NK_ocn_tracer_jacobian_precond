@@ -500,14 +500,17 @@ vmix_non_nbr_cnt (int k, int j, int i)
 /******************************************************************************/
 
 int
-sink_non_nbr_cnt (int k, int j, int i)
+sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
 {
    int cnt;
 
-   if ((sink_opt == sink_tracer) && (strcmp (sink_tracer_name, "Fe") == 0))
-      cnt = k;
-   else
-      cnt = 0;
+   cnt = 0;
+   if (sink_opt == sink_tracer) {
+      if (strcmp (sink_tracer_name, "Fe") == 0)
+         cnt = k;
+      if ((strcmp (sink_tracer_name, "OCMIP_BGC_PO4_DOP") == 0) && (tracer_ind == 0))
+         cnt = (k <= 10) ? k : 10;
+   }
 
    return cnt;
 }
@@ -518,6 +521,7 @@ void
 comp_nnz (void)
 {
    char *subname = "comp_nnz";
+   int tracer_ind;
    int tracer_state_ind;
    int i;
    int ip1;
@@ -526,41 +530,45 @@ comp_nnz (void)
    int k;
 
    nnz = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell itself */
-      (nnz)++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
+         /* cell itself */
          (nnz)++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         (nnz)++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         (nnz)++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         (nnz)++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         (nnz)++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         (nnz)++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            (nnz)++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            (nnz)++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            (nnz)++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            (nnz)++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            (nnz)++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            (nnz)++;
 
-      nnz += adv_non_nbr_cnt (k, j, i);
+         nnz += adv_non_nbr_cnt (k, j, i);
 
-      nnz += hmix_non_nbr_cnt (k, j, i);
+         nnz += hmix_non_nbr_cnt (k, j, i);
 
-      nnz += vmix_non_nbr_cnt (k, j, i);
+         nnz += vmix_non_nbr_cnt (k, j, i);
 
-      nnz += sink_non_nbr_cnt (k, j, i);
+         nnz += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         nnz += coupled_tracer_cnt - 1;
+      }
    }
 
    if (dbg_lvl)
@@ -576,6 +584,9 @@ init_matrix (void)
 {
    char *subname = "init_matrix";
    int coef_ind;
+   int tracer_ind;
+   int tracer_ind_2;
+   int flat_ind_offset;
    int tracer_state_ind;
    int flat_ind;
    int i;
@@ -587,162 +598,184 @@ init_matrix (void)
    int k;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      flat_ind = tracer_state_ind;
-      rowptr[flat_ind] = coef_ind;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         flat_ind = flat_ind_offset + tracer_state_ind;
+         rowptr[flat_ind] = coef_ind;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
-      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
-      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+         ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+         im2 = (im1 > 0) ? im1 - 1 : imt - 1;
 
-      /* cell itself */
-      nzval_row_wise[coef_ind] = 0.0;
-      colind[coef_ind] = int3_to_tracer_state_ind[k][j][i];
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0) {
+         /* cell itself */
          nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j][i];
+         colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j][i];
          coef_ind++;
-      }
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i]) {
-         nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j][i];
-         coef_ind++;
-      }
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1]) {
-         nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_tracer_state_ind[k][j][ip1];
-         coef_ind++;
-      }
-      /* cell 1 unit west */
-      if (k < KMT[j][im1]) {
-         nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_tracer_state_ind[k][j][im1];
-         coef_ind++;
-      }
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i]) {
-         nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_tracer_state_ind[k][j + 1][i];
-         coef_ind++;
-      }
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i]) {
-         nzval_row_wise[coef_ind] = 0.0;
-         colind[coef_ind] = int3_to_tracer_state_ind[k][j - 1][i];
-         coef_ind++;
-      }
-      if (adv_opt == adv_upwind3) {
-         /* cell 2 level shallower */
-         if (k - 2 >= 0) {
+         /* cell 1 level shallower */
+         if (k - 1 >= 0) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k - 2][j][i];
+            colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k - 1][j][i];
             coef_ind++;
          }
-         /* cell 2 level deeper */
-         if (k + 2 < KMT[j][i]) {
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k + 2][j][i];
+            colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k + 1][j][i];
             coef_ind++;
          }
-         /* cell 2 unit east */
-         if (k < KMT[j][ip2]) {
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k][j][ip2];
+            colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j][ip1];
             coef_ind++;
          }
-         /* cell 2 unit west */
-         if (k < KMT[j][im2]) {
+         /* cell 1 unit west */
+         if (k < KMT[j][im1]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k][j][im2];
+            colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j][im1];
             coef_ind++;
          }
-         /* cell 2 unit north */
-         if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k][j + 2][i];
+            colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j + 1][i];
             coef_ind++;
          }
-         /* cell 2 unit south */
-         if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i]) {
             nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k][j - 2][i];
+            colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j - 1][i];
             coef_ind++;
          }
-      }
-      if (hmix_opt == hmix_isop_file) {
-         /* shallower & east */
-         if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j][ip1];
-            coef_ind++;
+         if (adv_opt == adv_upwind3) {
+            /* cell 2 level shallower */
+            if (k - 2 >= 0) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k - 2][j][i];
+               coef_ind++;
+            }
+            /* cell 2 level deeper */
+            if (k + 2 < KMT[j][i]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k + 2][j][i];
+               coef_ind++;
+            }
+            /* cell 2 unit east */
+            if (k < KMT[j][ip2]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j][ip2];
+               coef_ind++;
+            }
+            /* cell 2 unit west */
+            if (k < KMT[j][im2]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j][im2];
+               coef_ind++;
+            }
+            /* cell 2 unit north */
+            if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j + 2][i];
+               coef_ind++;
+            }
+            /* cell 2 unit south */
+            if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j - 2][i];
+               coef_ind++;
+            }
          }
-         /* deeper & east */
-         if (k + 1 < KMT[j][ip1]) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j][ip1];
-            coef_ind++;
+         if (hmix_opt == hmix_isop_file) {
+            /* shallower & east */
+            if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k - 1][j][ip1];
+               coef_ind++;
+            }
+            /* deeper & east */
+            if (k + 1 < KMT[j][ip1]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k + 1][j][ip1];
+               coef_ind++;
+            }
+            /* shallower & west */
+            if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k - 1][j][im1];
+               coef_ind++;
+            }
+            /* deeper & west */
+            if (k + 1 < KMT[j][im1]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k + 1][j][im1];
+               coef_ind++;
+            }
+            /* shallower & north */
+            if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k - 1][j + 1][i];
+               coef_ind++;
+            }
+            /* deeper & north */
+            if (k + 1 < KMT[j + 1][i]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k + 1][j + 1][i];
+               coef_ind++;
+            }
+            /* shallower & south */
+            if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k - 1][j - 1][i];
+               coef_ind++;
+            }
+            /* deeper & south */
+            if (k + 1 < KMT[j - 1][i]) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k + 1][j - 1][i];
+               coef_ind++;
+            }
          }
-         /* shallower & west */
-         if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j][im1];
-            coef_ind++;
-         }
-         /* deeper & west */
-         if (k + 1 < KMT[j][im1]) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j][im1];
-            coef_ind++;
-         }
-         /* shallower & north */
-         if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j + 1][i];
-            coef_ind++;
-         }
-         /* deeper & north */
-         if (k + 1 < KMT[j + 1][i]) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j + 1][i];
-            coef_ind++;
-         }
-         /* shallower & south */
-         if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k - 1][j - 1][i];
-            coef_ind++;
-         }
-         /* deeper & south */
-         if (k + 1 < KMT[j - 1][i]) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[k + 1][j - 1][i];
-            coef_ind++;
-         }
-      }
-      if (vmix_opt == vmix_matrix_file) {
-         int kk;
+         if (vmix_opt == vmix_matrix_file) {
+            int kk;
 
-         for (kk = 0; kk < KMT[j][i]; kk++) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[kk][j][i];
-            coef_ind++;
+            for (kk = 0; kk < KMT[j][i]; kk++) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
+               coef_ind++;
+            }
          }
-      }
-      if ((sink_opt == sink_tracer) && (strcmp (sink_tracer_name, "Fe") == 0)) {
-         int kk;
+         if (sink_opt == sink_tracer) {
+            if (strcmp (sink_tracer_name, "Fe") == 0) {
+               int kk;
 
-         for (kk = k - 1; kk >= 0; kk--) {
-            nzval_row_wise[coef_ind] = 0.0;
-            colind[coef_ind] = int3_to_tracer_state_ind[kk][j][i];
-            coef_ind++;
+               for (kk = k - 1; kk >= 0; kk--) {
+                  nzval_row_wise[coef_ind] = 0.0;
+                  colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
+                  coef_ind++;
+               }
+            }
+            if ((strcmp (sink_tracer_name, "OCMIP_BGC_PO4_DOP") == 0) && (tracer_ind == 0)) {
+               int kk;
+
+               for (kk = (k - 1 <= 10) ? k - 1 : 10; kk >= 0; kk--) {
+                  nzval_row_wise[coef_ind] = 0.0;
+                  colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
+                  coef_ind++;
+               }
+            }
+         }
+         for (tracer_ind_2 = 0; tracer_ind_2 < tracer_state_len; tracer_ind_2++) {
+            if (tracer_ind_2 != tracer_ind) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] =
+                  (tracer_ind_2 - 1) * tracer_state_len + int3_to_tracer_state_ind[k][j][i];
+               coef_ind++;
+            }
          }
       }
    }
@@ -753,7 +786,6 @@ init_matrix (void)
       fprintf (stderr, "coef_ind = %d\nnnz      = %d\n", coef_ind, nnz);
       return 1;
    }
-   flat_ind = tracer_state_ind;
    rowptr[flat_len] = coef_ind;
 
    return 0;
@@ -981,73 +1013,80 @@ void
 add_UTE_coeffs (double ***UTE)
 {
    char *subname = "add_UTE_coeffs";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
    double east_self_interp_w;
    double west_self_interp_w;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      switch (adv_opt) {
-      case adv_donor:
-         east_self_interp_w = (UTE[k][j][i] > 0.0) ? 1.0 : 0.0;
-         west_self_interp_w = (UTE[k][j][im1] < 0.0) ? 1.0 : 0.0;
-         break;
-      case adv_cent:
-         east_self_interp_w = 0.5;
-         west_self_interp_w = 0.5;
-         break;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+
+         switch (adv_opt) {
+         case adv_donor:
+            east_self_interp_w = (UTE[k][j][i] > 0.0) ? 1.0 : 0.0;
+            west_self_interp_w = (UTE[k][j][im1] < 0.0) ? 1.0 : 0.0;
+            break;
+         case adv_cent:
+            east_self_interp_w = 0.5;
+            west_self_interp_w = 0.5;
+            break;
+         }
+
+         /* cell itself */
+         if (k < KMT[j][ip1])
+            nzval_row_wise[coef_ind] -=
+               east_self_interp_w * UTE[k][j][i] / TAREA[j][i] * delta_t;
+         if (k < KMT[j][im1])
+            nzval_row_wise[coef_ind] +=
+               west_self_interp_w * UTE[k][j][im1] / TAREA[j][i] * delta_t;
+         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1]) {
+            nzval_row_wise[coef_ind] -=
+               (1.0 - east_self_interp_w) * UTE[k][j][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit west */
+         if (k < KMT[j][im1]) {
+            nzval_row_wise[coef_ind] +=
+               (1.0 - west_self_interp_w) * UTE[k][j][im1] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-
-      /* cell itself */
-      if (k < KMT[j][ip1])
-         nzval_row_wise[coef_ind] -= east_self_interp_w * UTE[k][j][i] / TAREA[j][i] * delta_t;
-      if (k < KMT[j][im1])
-         nzval_row_wise[coef_ind] +=
-            west_self_interp_w * UTE[k][j][im1] / TAREA[j][i] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1]) {
-         nzval_row_wise[coef_ind] -=
-            (1.0 - east_self_interp_w) * UTE[k][j][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit west */
-      if (k < KMT[j][im1]) {
-         nzval_row_wise[coef_ind] +=
-            (1.0 - west_self_interp_w) * UTE[k][j][im1] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1059,73 +1098,79 @@ void
 add_VTN_coeffs (double ***VTN)
 {
    char *subname = "add_VTN_coeffs";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
    double north_self_interp_w;
    double south_self_interp_w;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      switch (adv_opt) {
-      case adv_donor:
-         north_self_interp_w = (VTN[k][j][i] > 0.0) ? 1.0 : 0.0;
-         south_self_interp_w = (VTN[k][j - 1][i] < 0.0) ? 1.0 : 0.0;
-         break;
-      case adv_cent:
-         north_self_interp_w = 0.5;
-         south_self_interp_w = 0.5;
-         break;
+         switch (adv_opt) {
+         case adv_donor:
+            north_self_interp_w = (VTN[k][j][i] > 0.0) ? 1.0 : 0.0;
+            south_self_interp_w = (VTN[k][j - 1][i] < 0.0) ? 1.0 : 0.0;
+            break;
+         case adv_cent:
+            north_self_interp_w = 0.5;
+            south_self_interp_w = 0.5;
+            break;
+         }
+
+         /* cell itself */
+         if (k < KMT[j + 1][i])
+            nzval_row_wise[coef_ind] -=
+               north_self_interp_w * VTN[k][j][i] / TAREA[j][i] * delta_t;
+         if (k < KMT[j - 1][i])
+            nzval_row_wise[coef_ind] +=
+               south_self_interp_w * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
+         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i]) {
+            nzval_row_wise[coef_ind] -=
+               (1.0 - north_self_interp_w) * VTN[k][j][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i]) {
+            nzval_row_wise[coef_ind] +=
+               (1.0 - south_self_interp_w) * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-
-      /* cell itself */
-      if (k < KMT[j + 1][i])
-         nzval_row_wise[coef_ind] -= north_self_interp_w * VTN[k][j][i] / TAREA[j][i] * delta_t;
-      if (k < KMT[j - 1][i])
-         nzval_row_wise[coef_ind] +=
-            south_self_interp_w * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i]) {
-         nzval_row_wise[coef_ind] -=
-            (1.0 - north_self_interp_w) * VTN[k][j][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i]) {
-         nzval_row_wise[coef_ind] +=
-            (1.0 - south_self_interp_w) * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1137,73 +1182,78 @@ void
 add_WVEL_coeffs (double ***WVEL)
 {
    char *subname = "add_WVEL_coeffs";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
    double top_self_interp_w;
    double bot_self_interp_w;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      switch (adv_opt) {
-      case adv_donor:
-         top_self_interp_w = (WVEL[k][j][i] > 0.0) ? 1.0 : 0.0;
+         switch (adv_opt) {
+         case adv_donor:
+            top_self_interp_w = (WVEL[k][j][i] > 0.0) ? 1.0 : 0.0;
+            if (k + 1 < KMT[j][i])
+               bot_self_interp_w = (WVEL[k + 1][j][i] < 0.0) ? 1.0 : 0.0;
+            break;
+         case adv_cent:
+            top_self_interp_w = 0.5;
+            bot_self_interp_w = 0.5;
+            break;
+         }
+
+         /* cell itself */
+         if (k - 1 >= 0)
+            nzval_row_wise[coef_ind] -= top_self_interp_w * WVEL[k][j][i] / dz[k] * delta_t;
          if (k + 1 < KMT[j][i])
-            bot_self_interp_w = (WVEL[k + 1][j][i] < 0.0) ? 1.0 : 0.0;
-         break;
-      case adv_cent:
-         top_self_interp_w = 0.5;
-         bot_self_interp_w = 0.5;
-         break;
+            nzval_row_wise[coef_ind] += bot_self_interp_w * WVEL[k + 1][j][i] / dz[k] * delta_t;
+         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0) {
+            nzval_row_wise[coef_ind] -=
+               (1.0 - top_self_interp_w) * WVEL[k][j][i] / dz[k] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
+            nzval_row_wise[coef_ind] +=
+               (1.0 - bot_self_interp_w) * WVEL[k + 1][j][i] / dz[k] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-
-      /* cell itself */
-      if (k - 1 >= 0)
-         nzval_row_wise[coef_ind] -= top_self_interp_w * WVEL[k][j][i] / dz[k] * delta_t;
-      if (k + 1 < KMT[j][i])
-         nzval_row_wise[coef_ind] += bot_self_interp_w * WVEL[k + 1][j][i] / dz[k] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0) {
-         nzval_row_wise[coef_ind] -=
-            (1.0 - top_self_interp_w) * WVEL[k][j][i] / dz[k] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i]) {
-         nzval_row_wise[coef_ind] +=
-            (1.0 - bot_self_interp_w) * WVEL[k + 1][j][i] / dz[k] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1287,111 +1337,117 @@ void
 add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 {
    char *subname = "add_UTE_coeffs_upwind3";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int ip2;
-      int im2;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int ip2;
+         int im2;
+         int j;
+         int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
-      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
-      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+         ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+         im2 = (im1 > 0) ? im1 - 1 : imt - 1;
 
-      /* cell itself */
-      /* advection through east face */
-      if (k < KMT[j][im1])
-         nzval_row_wise[coef_ind] -= 0.75 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
-      else
-         nzval_row_wise[coef_ind] -= (0.75 - 0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
-      nzval_row_wise[coef_ind] -= 0.375 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
-      /* advection through west face */
-      nzval_row_wise[coef_ind] += 0.375 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
-      if (k < KMT[j][ip1])
-         nzval_row_wise[coef_ind] += 0.75 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
-      else
-         nzval_row_wise[coef_ind] +=
-            (0.75 - 0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1]) {
+         /* cell itself */
          /* advection through east face */
-         nzval_row_wise[coef_ind] -= 0.375 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
-         if (k < KMT[j][ip2])
-            nzval_row_wise[coef_ind] -= 0.75 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         if (k < KMT[j][im1])
+            nzval_row_wise[coef_ind] -= 0.75 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
          else
             nzval_row_wise[coef_ind] -=
-               (0.75 - 0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+               (0.75 - 0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+         nzval_row_wise[coef_ind] -= 0.375 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
          /* advection through west face */
-         nzval_row_wise[coef_ind] += (-0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit west */
-      if (k < KMT[j][im1]) {
-         /* advection through east face */
-         nzval_row_wise[coef_ind] -= (-0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
-         /* advection through west face */
-         if (k < KMT[j][im2])
-            nzval_row_wise[coef_ind] += 0.75 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+         nzval_row_wise[coef_ind] += 0.375 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+         if (k < KMT[j][ip1])
+            nzval_row_wise[coef_ind] += 0.75 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
          else
             nzval_row_wise[coef_ind] +=
-               (0.75 - 0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
-         nzval_row_wise[coef_ind] += 0.375 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+               (0.75 - 0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
          coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1]) {
+            /* advection through east face */
+            nzval_row_wise[coef_ind] -= 0.375 * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+            if (k < KMT[j][ip2])
+               nzval_row_wise[coef_ind] -= 0.75 * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+            else
+               nzval_row_wise[coef_ind] -=
+                  (0.75 - 0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+            /* advection through west face */
+            nzval_row_wise[coef_ind] += (-0.125) * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit west */
+         if (k < KMT[j][im1]) {
+            /* advection through east face */
+            nzval_row_wise[coef_ind] -= (-0.125) * UTE_POS[k][j][i] / TAREA[j][i] * delta_t;
+            /* advection through west face */
+            if (k < KMT[j][im2])
+               nzval_row_wise[coef_ind] += 0.75 * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+            else
+               nzval_row_wise[coef_ind] +=
+                  (0.75 - 0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += 0.375 * UTE_NEG[k][j][im1] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
+
+         /* cell 2 level shallower */
+         if (k - 2 >= 0)
+            coef_ind++;
+         /* cell 2 level deeper */
+         if (k + 2 < KMT[j][i])
+            coef_ind++;
+         /* cell 2 unit east */
+         if (k < KMT[j][ip2]) {
+            /* advection through east face */
+            nzval_row_wise[coef_ind] -= (-0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 2 unit west */
+         if (k < KMT[j][im2]) {
+            /* advection through west face */
+            nzval_row_wise[coef_ind] += (-0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 2 unit north */
+         if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+            coef_ind++;
+         /* cell 2 unit south */
+         if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+            coef_ind++;
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
-
-      /* cell 2 level shallower */
-      if (k - 2 >= 0)
-         coef_ind++;
-      /* cell 2 level deeper */
-      if (k + 2 < KMT[j][i])
-         coef_ind++;
-      /* cell 2 unit east */
-      if (k < KMT[j][ip2]) {
-         /* advection through east face */
-         nzval_row_wise[coef_ind] -= (-0.125) * UTE_NEG[k][j][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 2 unit west */
-      if (k < KMT[j][im2]) {
-         /* advection through west face */
-         nzval_row_wise[coef_ind] += (-0.125) * UTE_POS[k][j][im1] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 2 unit north */
-      if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
-         coef_ind++;
-      /* cell 2 unit south */
-      if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
-         coef_ind++;
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1403,111 +1459,117 @@ void
 add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 {
    char *subname = "add_VTN_coeffs_upwind3";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int ip2;
-      int im2;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int ip2;
+         int im2;
+         int j;
+         int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
-      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
-      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+         ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+         im2 = (im1 > 0) ? im1 - 1 : imt - 1;
 
-      /* cell itself */
-      /* advection through north face */
-      if (k < KMT[j - 1][i])
-         nzval_row_wise[coef_ind] -= 0.75 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
-      else
-         nzval_row_wise[coef_ind] -= (0.75 - 0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
-      nzval_row_wise[coef_ind] -= 0.375 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
-      /* advection through south face */
-      nzval_row_wise[coef_ind] += 0.375 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
-      if (k < KMT[j + 1][i])
-         nzval_row_wise[coef_ind] += 0.75 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
-      else
-         nzval_row_wise[coef_ind] +=
-            (0.75 - 0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i]) {
+         /* cell itself */
          /* advection through north face */
-         nzval_row_wise[coef_ind] -= 0.375 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
-         if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
-            nzval_row_wise[coef_ind] -= 0.75 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+         if (k < KMT[j - 1][i])
+            nzval_row_wise[coef_ind] -= 0.75 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
          else
             nzval_row_wise[coef_ind] -=
-               (0.75 - 0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+               (0.75 - 0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+         nzval_row_wise[coef_ind] -= 0.375 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
          /* advection through south face */
-         nzval_row_wise[coef_ind] += (-0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i]) {
-         /* advection through north face */
-         nzval_row_wise[coef_ind] -= (-0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
-         /* advection through south face */
-         if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
-            nzval_row_wise[coef_ind] += 0.75 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+         nzval_row_wise[coef_ind] += 0.375 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+         if (k < KMT[j + 1][i])
+            nzval_row_wise[coef_ind] += 0.75 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
          else
             nzval_row_wise[coef_ind] +=
-               (0.75 - 0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
-         nzval_row_wise[coef_ind] += 0.375 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+               (0.75 - 0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
          coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i]) {
+            /* advection through north face */
+            nzval_row_wise[coef_ind] -= 0.375 * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+            if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+               nzval_row_wise[coef_ind] -= 0.75 * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+            else
+               nzval_row_wise[coef_ind] -=
+                  (0.75 - 0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+            /* advection through south face */
+            nzval_row_wise[coef_ind] += (-0.125) * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i]) {
+            /* advection through north face */
+            nzval_row_wise[coef_ind] -= (-0.125) * VTN_POS[k][j][i] / TAREA[j][i] * delta_t;
+            /* advection through south face */
+            if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+               nzval_row_wise[coef_ind] += 0.75 * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+            else
+               nzval_row_wise[coef_ind] +=
+                  (0.75 - 0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+            nzval_row_wise[coef_ind] += 0.375 * VTN_NEG[k][j - 1][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+
+         /* cell 2 level shallower */
+         if (k - 2 >= 0)
+            coef_ind++;
+         /* cell 2 level deeper */
+         if (k + 2 < KMT[j][i])
+            coef_ind++;
+         /* cell 2 unit east */
+         if (k < KMT[j][ip2])
+            coef_ind++;
+         /* cell 2 unit west */
+         if (k < KMT[j][im2])
+            coef_ind++;
+         /* cell 2 unit north */
+         if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
+            /* advection through north face */
+            nzval_row_wise[coef_ind] -= (-0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+         /* cell 2 unit south */
+         if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
+            /* advection through south face */
+            nzval_row_wise[coef_ind] += (-0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
+            coef_ind++;
+         }
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-
-      /* cell 2 level shallower */
-      if (k - 2 >= 0)
-         coef_ind++;
-      /* cell 2 level deeper */
-      if (k + 2 < KMT[j][i])
-         coef_ind++;
-      /* cell 2 unit east */
-      if (k < KMT[j][ip2])
-         coef_ind++;
-      /* cell 2 unit west */
-      if (k < KMT[j][im2])
-         coef_ind++;
-      /* cell 2 unit north */
-      if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
-         /* advection through north face */
-         nzval_row_wise[coef_ind] -= (-0.125) * VTN_NEG[k][j][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-      /* cell 2 unit south */
-      if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
-         /* advection through south face */
-         nzval_row_wise[coef_ind] += (-0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
-         coef_ind++;
-      }
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1519,6 +1581,7 @@ int
 add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 {
    char *subname = "add_WVEL_coeffs_upwind3";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
    double *dzc_tmp;
@@ -1606,105 +1669,109 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    tdelzm[km - 1] = 0.0;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int ip2;
-      int im2;
-      int j;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int ip2;
+         int im2;
+         int j;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
-      ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
-      im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+         ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+         im2 = (im1 > 0) ? im1 - 1 : imt - 1;
 
-      /* cell itself */
-      /* advection through top face */
-      if (k - 1 >= 0) {
-         if (k + 1 < KMT[j][i])
-            nzval_row_wise[coef_ind] -= talfzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
-         else
-            nzval_row_wise[coef_ind] -=
-               (talfzm[k - 1] + tdelzm[k - 1]) * WVEL_POS[k][j][i] / dz[k] * delta_t;
-         nzval_row_wise[coef_ind] -= talfzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
-      }
-      /* advection through bottom face */
-      if (k + 1 < KMT[j][i]) {
-         nzval_row_wise[coef_ind] += tbetzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
-         nzval_row_wise[coef_ind] += tbetzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
-      }
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0) {
+         /* cell itself */
          /* advection through top face */
-         nzval_row_wise[coef_ind] -= tbetzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
-         nzval_row_wise[coef_ind] -= tbetzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+         if (k - 1 >= 0) {
+            if (k + 1 < KMT[j][i])
+               nzval_row_wise[coef_ind] -= talfzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
+            else
+               nzval_row_wise[coef_ind] -=
+                  (talfzm[k - 1] + tdelzm[k - 1]) * WVEL_POS[k][j][i] / dz[k] * delta_t;
+            nzval_row_wise[coef_ind] -= talfzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+         }
          /* advection through bottom face */
-         if (k + 1 < KMT[j][i])
-            nzval_row_wise[coef_ind] += tgamzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+         if (k + 1 < KMT[j][i]) {
+            nzval_row_wise[coef_ind] += tbetzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+            nzval_row_wise[coef_ind] += tbetzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+         }
          coef_ind++;
-      }
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i]) {
-         /* advection through top face */
-         if (k - 1 >= 0)
-            nzval_row_wise[coef_ind] -= tdelzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
-         /* advection through bottom face */
-         if (k + 2 < KMT[j][i])
-            nzval_row_wise[coef_ind] += talfzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
-         else
-            nzval_row_wise[coef_ind] +=
-               (talfzm[k] + tdelzm[k]) * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
-         nzval_row_wise[coef_ind] += talfzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
-         coef_ind++;
-      }
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0) {
+            /* advection through top face */
+            nzval_row_wise[coef_ind] -= tbetzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
+            nzval_row_wise[coef_ind] -= tbetzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+            /* advection through bottom face */
+            if (k + 1 < KMT[j][i])
+               nzval_row_wise[coef_ind] += tgamzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
+            /* advection through top face */
+            if (k - 1 >= 0)
+               nzval_row_wise[coef_ind] -= tdelzm[k - 1] * WVEL_POS[k][j][i] / dz[k] * delta_t;
+            /* advection through bottom face */
+            if (k + 2 < KMT[j][i])
+               nzval_row_wise[coef_ind] += talfzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+            else
+               nzval_row_wise[coef_ind] +=
+                  (talfzm[k] + tdelzm[k]) * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+            nzval_row_wise[coef_ind] += talfzp[k] * WVEL_NEG[k + 1][j][i] / dz[k] * delta_t;
+            coef_ind++;
+         }
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
 
-      /* cell 2 level shallower */
-      if (k - 2 >= 0) {
-         /* advection through top face */
-         nzval_row_wise[coef_ind] -= tgamzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
-         coef_ind++;
+         /* cell 2 level shallower */
+         if (k - 2 >= 0) {
+            /* advection through top face */
+            nzval_row_wise[coef_ind] -= tgamzp[k - 1] * WVEL_NEG[k][j][i] / dz[k] * delta_t;
+            coef_ind++;
+         }
+         /* cell 2 level deeper */
+         if (k + 2 < KMT[j][i]) {
+            /* advection through bottom face */
+            nzval_row_wise[coef_ind] += tdelzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
+            coef_ind++;
+         }
+         /* cell 2 unit east */
+         if (k < KMT[j][ip2])
+            coef_ind++;
+         /* cell 2 unit west */
+         if (k < KMT[j][im2])
+            coef_ind++;
+         /* cell 2 unit north */
+         if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
+            coef_ind++;
+         /* cell 2 unit south */
+         if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
+            coef_ind++;
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-      /* cell 2 level deeper */
-      if (k + 2 < KMT[j][i]) {
-         /* advection through bottom face */
-         nzval_row_wise[coef_ind] += tdelzm[k] * WVEL_POS[k + 1][j][i] / dz[k] * delta_t;
-         coef_ind++;
-      }
-      /* cell 2 unit east */
-      if (k < KMT[j][ip2])
-         coef_ind++;
-      /* cell 2 unit west */
-      if (k < KMT[j][im2])
-         coef_ind++;
-      /* cell 2 unit north */
-      if ((j + 2 < jmt) && (k < KMT[j + 2][i]))
-         coef_ind++;
-      /* cell 2 unit south */
-      if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
-         coef_ind++;
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1794,6 +1861,7 @@ add_hmix_isop_file (void)
    double ***IRF;
    char IRF_name[64];
 
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
@@ -1812,118 +1880,123 @@ add_hmix_isop_file (void)
                return 1;
 
             coef_ind = 0;
-            for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-               int i;
-               int ip1;
-               int im1;
-               int j;
-               int k;
+            for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+               for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len;
+                    tracer_state_ind++) {
+                  int i;
+                  int ip1;
+                  int im1;
+                  int j;
+                  int k;
 
-               i = tracer_state_ind_to_int3[tracer_state_ind].i;
-               j = tracer_state_ind_to_int3[tracer_state_ind].j;
-               k = tracer_state_ind_to_int3[tracer_state_ind].k;
-               ip1 = (i < imt - 1) ? i + 1 : 0;
-               im1 = (i > 0) ? i - 1 : imt - 1;
+                  i = tracer_state_ind_to_int3[tracer_state_ind].i;
+                  j = tracer_state_ind_to_int3[tracer_state_ind].j;
+                  k = tracer_state_ind_to_int3[tracer_state_ind].k;
+                  ip1 = (i < imt - 1) ? i + 1 : 0;
+                  im1 = (i > 0) ? i - 1 : imt - 1;
 
-               /* cell itself */
-               if ((i % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
-                  nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-               coef_ind++;
-               /* cell 1 level shallower */
-               if (k - 1 >= 0) {
-                  if ((i % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                  /* cell itself */
+                  if ((i % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
                      nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
                   coef_ind++;
-               }
-               /* cell 1 level deeper */
-               if (k + 1 < KMT[j][i]) {
-                  if ((i % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* cell 1 unit east */
-               if (k < KMT[j][ip1]) {
-                  if ((ip1 % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* cell 1 unit west */
-               if (k < KMT[j][im1]) {
-                  if ((im1 % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* cell 1 unit north */
-               if (k < KMT[j + 1][i]) {
-                  if ((i % 4 == iprime) && ((j + 1) % 3 == jprime) && (k % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* cell 1 unit south */
-               if (k < KMT[j - 1][i]) {
-                  if ((i % 4 == iprime) && ((j - 1) % 3 == jprime) && (k % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
+                  /* cell 1 level shallower */
+                  if (k - 1 >= 0) {
+                     if ((i % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* cell 1 level deeper */
+                  if (k + 1 < KMT[j][i]) {
+                     if ((i % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* cell 1 unit east */
+                  if (k < KMT[j][ip1]) {
+                     if ((ip1 % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* cell 1 unit west */
+                  if (k < KMT[j][im1]) {
+                     if ((im1 % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* cell 1 unit north */
+                  if (k < KMT[j + 1][i]) {
+                     if ((i % 4 == iprime) && ((j + 1) % 3 == jprime) && (k % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* cell 1 unit south */
+                  if (k < KMT[j - 1][i]) {
+                     if ((i % 4 == iprime) && ((j - 1) % 3 == jprime) && (k % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
 
-               coef_ind += adv_non_nbr_cnt (k, j, i);
+                  coef_ind += adv_non_nbr_cnt (k, j, i);
 
-               /* shallower & east */
-               if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
-                  if ((ip1 % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* deeper & east */
-               if (k + 1 < KMT[j][ip1]) {
-                  if ((ip1 % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* shallower & west */
-               if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
-                  if ((im1 % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* deeper & west */
-               if (k + 1 < KMT[j][im1]) {
-                  if ((im1 % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* shallower & north */
-               if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
-                  if ((i % 4 == iprime) && ((j + 1) % 3 == jprime)
-                      && ((k - 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* deeper & north */
-               if (k + 1 < KMT[j + 1][i]) {
-                  if ((i % 4 == iprime) && ((j + 1) % 3 == jprime)
-                      && ((k + 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* shallower & south */
-               if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
-                  if ((i % 4 == iprime) && ((j - 1) % 3 == jprime)
-                      && ((k - 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
-               /* deeper & south */
-               if (k + 1 < KMT[j - 1][i]) {
-                  if ((i % 4 == iprime) && ((j - 1) % 3 == jprime)
-                      && ((k + 1) % 3 == kprime))
-                     nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
-                  coef_ind++;
-               }
+                  /* shallower & east */
+                  if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
+                     if ((ip1 % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* deeper & east */
+                  if (k + 1 < KMT[j][ip1]) {
+                     if ((ip1 % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* shallower & west */
+                  if ((k - 1 >= 0) && (k - 1 < KMT[j][im1])) {
+                     if ((im1 % 4 == iprime) && (j % 3 == jprime) && ((k - 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* deeper & west */
+                  if (k + 1 < KMT[j][im1]) {
+                     if ((im1 % 4 == iprime) && (j % 3 == jprime) && ((k + 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* shallower & north */
+                  if ((k - 1 >= 0) && (k - 1 < KMT[j + 1][i])) {
+                     if ((i % 4 == iprime) && ((j + 1) % 3 == jprime)
+                         && ((k - 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* deeper & north */
+                  if (k + 1 < KMT[j + 1][i]) {
+                     if ((i % 4 == iprime) && ((j + 1) % 3 == jprime)
+                         && ((k + 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* shallower & south */
+                  if ((k - 1 >= 0) && (k - 1 < KMT[j - 1][i])) {
+                     if ((i % 4 == iprime) && ((j - 1) % 3 == jprime)
+                         && ((k - 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
+                  /* deeper & south */
+                  if (k + 1 < KMT[j - 1][i]) {
+                     if ((i % 4 == iprime) && ((j - 1) % 3 == jprime)
+                         && ((k + 1) % 3 == kprime))
+                        nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
+                     coef_ind++;
+                  }
 
-               coef_ind += vmix_non_nbr_cnt (k, j, i);
+                  coef_ind += vmix_non_nbr_cnt (k, j, i);
 
-               coef_ind += sink_non_nbr_cnt (k, j, i);
+                  coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+                  coef_ind += coupled_tracer_cnt - 1;
+               }
             }
             if (dbg_lvl > 1)
                printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -1947,6 +2020,7 @@ add_hmix_hor_file (void)
    double **HUW;
    double **HTN;
 
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
@@ -2004,90 +2078,94 @@ add_hmix_hor_file (void)
       return 1;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      double ce;
-      double cw;
-      double cn;
-      double cs;
+         double ce;
+         double cw;
+         double cn;
+         double cs;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         ce =
-            0.5 * (KAPPA[k][j][i] +
-                   KAPPA[k][j][ip1]) * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
-      else
-         ce = 0.0;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            ce =
+               0.5 * (KAPPA[k][j][i] +
+                      KAPPA[k][j][ip1]) * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
+         else
+            ce = 0.0;
 
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         cw =
-            0.5 * (KAPPA[k][j][im1] +
-                   KAPPA[k][j][i]) * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
-      else
-         cw = 0.0;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            cw =
+               0.5 * (KAPPA[k][j][im1] +
+                      KAPPA[k][j][i]) * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
+         else
+            cw = 0.0;
 
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         cn =
-            0.5 * (KAPPA[k][j][i] +
-                   KAPPA[k][j + 1][i]) * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
-      else
-         cn = 0.0;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            cn =
+               0.5 * (KAPPA[k][j][i] +
+                      KAPPA[k][j + 1][i]) * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
+         else
+            cn = 0.0;
 
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         cs = 0.5 * (KAPPA[k][j - 1][i] + KAPPA[k][j][i]) * HTN[j - 1][i] / HUW[j - 1]
-            [i] / TAREA[j][i] * delta_t;
-      else
-         cs = 0.0;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            cs = 0.5 * (KAPPA[k][j - 1][i] + KAPPA[k][j][i]) * HTN[j - 1][i] / HUW[j - 1]
+               [i] / TAREA[j][i] * delta_t;
+         else
+            cs = 0.0;
 
-      /* cell itself */
-      nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
+         /* cell itself */
+         nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
          coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1]) {
-         nzval_row_wise[coef_ind] += ce;
-         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1]) {
+            nzval_row_wise[coef_ind] += ce;
+            coef_ind++;
+         }
+         /* cell 1 unit west */
+         if (k < KMT[j][im1]) {
+            nzval_row_wise[coef_ind] += cw;
+            coef_ind++;
+         }
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i]) {
+            nzval_row_wise[coef_ind] += cn;
+            coef_ind++;
+         }
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i]) {
+            nzval_row_wise[coef_ind] += cs;
+            coef_ind++;
+         }
+
+         coef_ind += adv_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-      /* cell 1 unit west */
-      if (k < KMT[j][im1]) {
-         nzval_row_wise[coef_ind] += cw;
-         coef_ind++;
-      }
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i]) {
-         nzval_row_wise[coef_ind] += cn;
-         coef_ind++;
-      }
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i]) {
-         nzval_row_wise[coef_ind] += cs;
-         coef_ind++;
-      }
-
-      coef_ind += adv_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -2112,6 +2190,7 @@ add_hmix_const (void)
    double **HUW;
    double **HTN;
 
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
    double ah;
@@ -2146,83 +2225,87 @@ add_hmix_const (void)
       return 1;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      double ce;
-      double cw;
-      double cn;
-      double cs;
+         double ce;
+         double cw;
+         double cn;
+         double cs;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         ce = ah * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
-      else
-         ce = 0.0;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            ce = ah * HTE[j][i] / HUS[j][i] / TAREA[j][i] * delta_t;
+         else
+            ce = 0.0;
 
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         cw = ah * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
-      else
-         cw = 0.0;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            cw = ah * HTE[j][im1] / HUS[j][im1] / TAREA[j][i] * delta_t;
+         else
+            cw = 0.0;
 
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         cn = ah * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
-      else
-         cn = 0.0;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            cn = ah * HTN[j][i] / HUW[j][i] / TAREA[j][i] * delta_t;
+         else
+            cn = 0.0;
 
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         cs = ah * HTN[j - 1][i] / HUW[j - 1][i] / TAREA[j][i] * delta_t;
-      else
-         cs = 0.0;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            cs = ah * HTN[j - 1][i] / HUW[j - 1][i] / TAREA[j][i] * delta_t;
+         else
+            cs = 0.0;
 
-      /* cell itself */
-      nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
+         /* cell itself */
+         nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
          coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1]) {
-         nzval_row_wise[coef_ind] += ce;
-         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1]) {
+            nzval_row_wise[coef_ind] += ce;
+            coef_ind++;
+         }
+         /* cell 1 unit west */
+         if (k < KMT[j][im1]) {
+            nzval_row_wise[coef_ind] += cw;
+            coef_ind++;
+         }
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i]) {
+            nzval_row_wise[coef_ind] += cn;
+            coef_ind++;
+         }
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i]) {
+            nzval_row_wise[coef_ind] += cs;
+            coef_ind++;
+         }
+
+         coef_ind += adv_non_nbr_cnt (k, j, i);
+
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-      /* cell 1 unit west */
-      if (k < KMT[j][im1]) {
-         nzval_row_wise[coef_ind] += cw;
-         coef_ind++;
-      }
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i]) {
-         nzval_row_wise[coef_ind] += cn;
-         coef_ind++;
-      }
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i]) {
-         nzval_row_wise[coef_ind] += cs;
-         coef_ind++;
-      }
-
-      coef_ind += adv_non_nbr_cnt (k, j, i);
-
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -2281,6 +2364,7 @@ add_vmix_matrix_file (void)
    double ***vmix_matrix_var;
 
    int kprime;
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
@@ -2300,52 +2384,56 @@ add_vmix_matrix_file (void)
          return 1;
 
       coef_ind = 0;
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int i;
-         int ip1;
-         int im1;
-         int j;
-         int k;
-         int kk;
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i;
+            int ip1;
+            int im1;
+            int j;
+            int k;
+            int kk;
 
-         i = tracer_state_ind_to_int3[tracer_state_ind].i;
-         j = tracer_state_ind_to_int3[tracer_state_ind].j;
-         k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         ip1 = (i < imt - 1) ? i + 1 : 0;
-         im1 = (i > 0) ? i - 1 : imt - 1;
+            i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            ip1 = (i < imt - 1) ? i + 1 : 0;
+            im1 = (i > 0) ? i - 1 : imt - 1;
 
-         /* cell itself */
-         coef_ind++;
-         /* cell 1 level shallower */
-         if (k - 1 >= 0)
+            /* cell itself */
             coef_ind++;
-         /* cell 1 level deeper */
-         if (k + 1 < KMT[j][i])
-            coef_ind++;
-         /* cell 1 unit east */
-         if (k < KMT[j][ip1])
-            coef_ind++;
-         /* cell 1 unit west */
-         if (k < KMT[j][im1])
-            coef_ind++;
-         /* cell 1 unit north */
-         if (k < KMT[j + 1][i])
-            coef_ind++;
-         /* cell 1 unit south */
-         if (k < KMT[j - 1][i])
-            coef_ind++;
+            /* cell 1 level shallower */
+            if (k - 1 >= 0)
+               coef_ind++;
+            /* cell 1 level deeper */
+            if (k + 1 < KMT[j][i])
+               coef_ind++;
+            /* cell 1 unit east */
+            if (k < KMT[j][ip1])
+               coef_ind++;
+            /* cell 1 unit west */
+            if (k < KMT[j][im1])
+               coef_ind++;
+            /* cell 1 unit north */
+            if (k < KMT[j + 1][i])
+               coef_ind++;
+            /* cell 1 unit south */
+            if (k < KMT[j - 1][i])
+               coef_ind++;
 
-         coef_ind += adv_non_nbr_cnt (k, j, i);
+            coef_ind += adv_non_nbr_cnt (k, j, i);
 
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
+            coef_ind += hmix_non_nbr_cnt (k, j, i);
 
-         for (kk = 0; kk < KMT[j][i]; kk++) {
-            if (kk == kprime)
-               nzval_row_wise[coef_ind] += vmix_matrix_var[k][j][i] * delta_t;
-            coef_ind++;
+            for (kk = 0; kk < KMT[j][i]; kk++) {
+               if (kk == kprime)
+                  nzval_row_wise[coef_ind] += vmix_matrix_var[k][j][i] * delta_t;
+               coef_ind++;
+            }
+
+            coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+            coef_ind += coupled_tracer_cnt - 1;
          }
-
-         coef_ind += sink_non_nbr_cnt (k, j, i);
       }
    }
    if (dbg_lvl > 1)
@@ -2368,6 +2456,7 @@ add_vmix_file (void)
    int j;
    int k;
 
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
@@ -2398,65 +2487,69 @@ add_vmix_file (void)
             VDC_TOTAL[k][j][i] += VDC_READ[k][j][i];
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      double ct;
-      double cb;
+         double ct;
+         double cb;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         ct = VDC_TOTAL[k - 1][j][i] / (0.5 * (dz[k - 1] + dz[k])) / dz[k] * delta_t;
-      else
-         ct = 0.0;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            ct = VDC_TOTAL[k - 1][j][i] / (0.5 * (dz[k - 1] + dz[k])) / dz[k] * delta_t;
+         else
+            ct = 0.0;
 
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         cb = VDC_TOTAL[k][j][i] / (0.5 * (dz[k] + dz[k + 1])) / dz[k] * delta_t;
-      else
-         cb = 0.0;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            cb = VDC_TOTAL[k][j][i] / (0.5 * (dz[k] + dz[k + 1])) / dz[k] * delta_t;
+         else
+            cb = 0.0;
 
-      /* cell itself */
-      nzval_row_wise[coef_ind] -= (ct + cb);
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0) {
-         nzval_row_wise[coef_ind] += ct;
+         /* cell itself */
+         nzval_row_wise[coef_ind] -= (ct + cb);
          coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0) {
+            nzval_row_wise[coef_ind] += ct;
+            coef_ind++;
+         }
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
+            nzval_row_wise[coef_ind] += cb;
+            coef_ind++;
+         }
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
+
+         coef_ind += adv_non_nbr_cnt (k, j, i);
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i]) {
-         nzval_row_wise[coef_ind] += cb;
-         coef_ind++;
-      }
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
-
-      coef_ind += adv_non_nbr_cnt (k, j, i);
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -2473,6 +2566,7 @@ void
 add_vmix_const (void)
 {
    char *subname = "add_vmix_const";
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
    double vdc;
@@ -2480,65 +2574,69 @@ add_vmix_const (void)
    vdc = 0.1;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      double ct;
-      double cb;
+         double ct;
+         double cb;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
-         ct = vdc / (0.5 * (dz[k - 1] + dz[k])) / dz[k] * delta_t;
-      else
-         ct = 0.0;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            ct = vdc / (0.5 * (dz[k - 1] + dz[k])) / dz[k] * delta_t;
+         else
+            ct = 0.0;
 
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         cb = vdc / (0.5 * (dz[k] + dz[k + 1])) / dz[k] * delta_t;
-      else
-         cb = 0.0;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            cb = vdc / (0.5 * (dz[k] + dz[k + 1])) / dz[k] * delta_t;
+         else
+            cb = 0.0;
 
-      /* cell itself */
-      nzval_row_wise[coef_ind] -= (ct + cb);
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0) {
-         nzval_row_wise[coef_ind] += ct;
+         /* cell itself */
+         nzval_row_wise[coef_ind] -= (ct + cb);
          coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0) {
+            nzval_row_wise[coef_ind] += ct;
+            coef_ind++;
+         }
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
+            nzval_row_wise[coef_ind] += cb;
+            coef_ind++;
+         }
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
+
+         coef_ind += adv_non_nbr_cnt (k, j, i);
+
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
+
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
       }
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i]) {
-         nzval_row_wise[coef_ind] += cb;
-         coef_ind++;
-      }
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
-
-      coef_ind += adv_non_nbr_cnt (k, j, i);
-
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-      coef_ind += sink_non_nbr_cnt (k, j, i);
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -2582,6 +2680,7 @@ add_pv (void)
    char *subname = "add_pv";
    double **PV;
 
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
@@ -2596,49 +2695,53 @@ add_pv (void)
       return 1;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell itself */
-      if (k == 0)
-         nzval_row_wise[coef_ind] -= PV[j][i] / dz[0] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
+         /* cell itself */
+         if (k == 0)
+            nzval_row_wise[coef_ind] -= PV[j][i] / dz[0] * delta_t;
          coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
 
-      coef_ind += adv_non_nbr_cnt (k, j, i);
+         coef_ind += adv_non_nbr_cnt (k, j, i);
 
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
 
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
 
-      coef_ind += sink_non_nbr_cnt (k, j, i);
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
+      }
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
@@ -2661,6 +2764,7 @@ add_d_SF_d_TRACER (void)
    char *subname = "add_d_SF_d_TRACER";
    double **d_SF_d_TRACER;
 
+   int tracer_ind;
    int tracer_state_ind;
    int coef_ind;
 
@@ -2675,49 +2779,53 @@ add_d_SF_d_TRACER (void)
       return 1;
 
    coef_ind = 0;
-   for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-      int i;
-      int ip1;
-      int im1;
-      int j;
-      int k;
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         int i;
+         int ip1;
+         int im1;
+         int j;
+         int k;
 
-      i = tracer_state_ind_to_int3[tracer_state_ind].i;
-      j = tracer_state_ind_to_int3[tracer_state_ind].j;
-      k = tracer_state_ind_to_int3[tracer_state_ind].k;
-      ip1 = (i < imt - 1) ? i + 1 : 0;
-      im1 = (i > 0) ? i - 1 : imt - 1;
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
 
-      /* cell itself */
-      if (k == 0)
-         nzval_row_wise[coef_ind] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
-      coef_ind++;
-      /* cell 1 level shallower */
-      if (k - 1 >= 0)
+         /* cell itself */
+         if (k == 0)
+            nzval_row_wise[coef_ind] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
          coef_ind++;
-      /* cell 1 level deeper */
-      if (k + 1 < KMT[j][i])
-         coef_ind++;
-      /* cell 1 unit east */
-      if (k < KMT[j][ip1])
-         coef_ind++;
-      /* cell 1 unit west */
-      if (k < KMT[j][im1])
-         coef_ind++;
-      /* cell 1 unit north */
-      if (k < KMT[j + 1][i])
-         coef_ind++;
-      /* cell 1 unit south */
-      if (k < KMT[j - 1][i])
-         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0)
+            coef_ind++;
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i])
+            coef_ind++;
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1])
+            coef_ind++;
+         /* cell 1 unit west */
+         if (k < KMT[j][im1])
+            coef_ind++;
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i])
+            coef_ind++;
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i])
+            coef_ind++;
 
-      coef_ind += adv_non_nbr_cnt (k, j, i);
+         coef_ind += adv_non_nbr_cnt (k, j, i);
 
-      coef_ind += hmix_non_nbr_cnt (k, j, i);
+         coef_ind += hmix_non_nbr_cnt (k, j, i);
 
-      coef_ind += vmix_non_nbr_cnt (k, j, i);
+         coef_ind += vmix_non_nbr_cnt (k, j, i);
 
-      coef_ind += sink_non_nbr_cnt (k, j, i);
+         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
+
+         coef_ind += coupled_tracer_cnt - 1;
+      }
    }
    if (dbg_lvl > 1)
       printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
