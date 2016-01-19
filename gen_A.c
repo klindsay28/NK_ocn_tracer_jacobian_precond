@@ -81,7 +81,7 @@ grow_per_tracer_opt (int prev_tracer_cnt, int new_tracer_cnt)
       per_tracer_opt[tracer_ind].sink_depth = 10.0e2;   /* 10m */
       per_tracer_opt[tracer_ind].sink_file_name = NULL;
       per_tracer_opt[tracer_ind].sink_field_name = NULL;
-      per_tracer_opt[tracer_ind].sink_tracer_name = NULL;
+      per_tracer_opt[tracer_ind].sink_generic_tracer_name = NULL;
 
       per_tracer_opt[tracer_ind].pv_file_name = NULL;
       per_tracer_opt[tracer_ind].pv_field_name = NULL;
@@ -219,8 +219,8 @@ read_opt_file ()
             per_tracer_opt[tracer_ind].sink_opt = sink_const_shallow;
          else if (strcmp (optval, "file") == 0)
             per_tracer_opt[tracer_ind].sink_opt = sink_file;
-         else if (strcmp (optval, "tracer") == 0)
-            per_tracer_opt[tracer_ind].sink_opt = sink_tracer;
+         else if (strcmp (optval, "generic_tracer") == 0)
+            per_tracer_opt[tracer_ind].sink_opt = sink_generic_tracer;
          else {
             fprintf (stderr, "unknown %s: %s\n", optname, optval);
             return 1;
@@ -266,7 +266,7 @@ read_opt_file ()
             }
             strcpy (per_tracer_opt[tracer_ind].sink_field_name, optval);
          }
-         if (per_tracer_opt[tracer_ind].sink_opt == sink_tracer) {
+         if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
             if ((optval = strtok (NULL, " \n")) == NULL) {
                fprintf (stderr, "unspecified sink_file_name\n");
                return 1;
@@ -277,17 +277,17 @@ read_opt_file ()
             }
             strcpy (per_tracer_opt[tracer_ind].sink_file_name, optval);
             if ((optval = strtok (NULL, " \n")) == NULL) {
-               fprintf (stderr, "unspecified sink_tracer_name\n");
+               fprintf (stderr, "unspecified sink_generic_tracer_name\n");
                return 1;
             }
-            if ((per_tracer_opt[tracer_ind].sink_tracer_name = malloc (1 + strlen (optval))) == NULL) {
-               fprintf (stderr, "malloc failed in %s for sink_tracer_name\n", subname);
+            if ((per_tracer_opt[tracer_ind].sink_generic_tracer_name = malloc (1 + strlen (optval))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for sink_generic_tracer_name\n", subname);
                return 1;
             }
-            strcpy (per_tracer_opt[tracer_ind].sink_tracer_name, optval);
-            if (strcmp (per_tracer_opt[tracer_ind].sink_tracer_name, "OCMIP_BGC_PO4")) {
-               fprintf (stderr, "unknown tracer name %s for sink_type == sink_tracer in %s\n",
-                        per_tracer_opt[tracer_ind].sink_tracer_name, subname);
+            strcpy (per_tracer_opt[tracer_ind].sink_generic_tracer_name, optval);
+            if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4")) {
+               fprintf (stderr, "unknown tracer name %s for sink_type == sink_generic_tracer in %s\n",
+                        per_tracer_opt[tracer_ind].sink_generic_tracer_name, subname);
                return 1;
             }
          }
@@ -418,10 +418,10 @@ write_opts (void)
             printf ("   sink_file_name          = %s\n", per_tracer_opt[tracer_ind].sink_file_name);
             printf ("   sink_field_name         = %s\n", per_tracer_opt[tracer_ind].sink_field_name);
             break;
-         case sink_tracer:
-            printf ("   sink_opt                = %s\n", "tracer");
+         case sink_generic_tracer:
+            printf ("   sink_opt                = %s\n", "generic_tracer");
             printf ("   sink_file_name          = %s\n", per_tracer_opt[tracer_ind].sink_file_name);
-            printf ("   sink_tracer_name        = %s\n", per_tracer_opt[tracer_ind].sink_tracer_name);
+            printf ("   sink_generic_tracer_name= %s\n", per_tracer_opt[tracer_ind].sink_generic_tracer_name);
             break;
          }
          printf ("   pv_file_name            = %s\n",

@@ -24,7 +24,8 @@
  *    add_adv () : add advection related terms to matrix
  *    add_hmix () : add lateral mixing related terms to matrix
  *    add_vmix () : add vertical mixing related terms to matrix
- *    add_diag_sink () : add diagonal source-sink terms to matrix
+ *    add_sink_pure_diag () : add pure diagonal, i.e. non-generic, source-sink terms to matrix
+ *    add_sink_generic_tracer () : add single generic tracer source-sink terms to matrix
  *    add_pv () : add piston velocity terms to matrix
  *    add_d_SF_d_TRACER () : add generic surface flux terms to matrix
  *
@@ -490,8 +491,8 @@ sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
    int cnt;
 
    cnt = 0;
-   if (per_tracer_opt[tracer_ind].sink_opt == sink_tracer) {
-      if (strcmp (per_tracer_opt[tracer_ind].sink_tracer_name, "OCMIP_BGC_PO4") == 0)
+   if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
+      if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4") == 0)
          cnt = (k <= 10) ? k : 10;
    }
 
@@ -732,8 +733,8 @@ init_matrix (void)
                coef_ind++;
             }
          }
-         if (per_tracer_opt[tracer_ind].sink_opt == sink_tracer) {
-            if (strcmp (per_tracer_opt[tracer_ind].sink_tracer_name, "OCMIP_BGC_PO4") == 0) {
+         if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
+            if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4") == 0) {
                int kk;
 
                for (kk = (k <= 10) ? k - 1 : 10 - 1; kk >= 0; kk--) {
@@ -2558,9 +2559,9 @@ add_vmix (void)
 /* from sparsity pattern, we know that coef_ind for diagonal term for nth tracer is rowptr[offset + tracer_state_ind] */
 
 int
-add_diag_sink (void)
+add_sink_pure_diag (void)
 {
-   char *subname = "add_diag_sink";
+   char *subname = "add_sink_pure_diag";
    int tracer_ind;
    int flat_ind_offset;
    int tracer_state_ind;
@@ -2575,12 +2576,21 @@ add_diag_sink (void)
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
          }
+         if (dbg_lvl > 1) {
+            printf ("sink const (%e) added for tracer %d\n\n", per_tracer_opt[tracer_ind].sink_rate, tracer_ind);
+            fflush (stdout);
+         }
          break;
       case sink_const_shallow:
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
             if (z_t[k] < per_tracer_opt[tracer_ind].sink_depth)
                nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+         }
+         if (dbg_lvl > 1) {
+            printf ("sink const shallow (%e,%e) added for tracer %d\n\n", per_tracer_opt[tracer_ind].sink_depth,
+                    per_tracer_opt[tracer_ind].sink_rate, tracer_ind);
+            fflush (stdout);
          }
          break;
       case sink_file:
@@ -2598,13 +2608,35 @@ add_diag_sink (void)
             nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
          }
          free_3d_double (SINK_RATE_FIELD);
+         if (dbg_lvl > 1) {
+            printf ("file sink (%s,%s) added for tracer %d\n\n", per_tracer_opt[tracer_ind].sink_file_name,
+                    per_tracer_opt[tracer_ind].sink_field_name, tracer_ind);
+            fflush (stdout);
+         }
          break;
       }
    }
 
-   if (dbg_lvl > 1) {
-      printf ("diag sink added\n\n");
-      fflush (stdout);
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_sink_generic_tracer (void)
+{
+   char *subname = "add_sink_generic_tracer";
+   int tracer_ind;
+
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
+
+         if (dbg_lvl > 1) {
+            printf ("generic tracer sink added for tracer %d, %s\n\n", tracer_ind,
+                    per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+            fflush (stdout);
+         }
+      }
    }
 
    return 0;
@@ -2860,7 +2892,10 @@ gen_sparse_matrix (double day_cnt)
    if (add_vmix ())
       return 1;
 
-   if (add_diag_sink ())
+   if (add_sink_pure_diag ())
+      return 1;
+
+   if (add_sink_generic_tracer ())
       return 1;
 
    if (add_pv ())

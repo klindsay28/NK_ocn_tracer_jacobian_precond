@@ -33,7 +33,7 @@ typedef enum
 { vmix_const, vmix_file, vmix_matrix_file } vmix_opt_t;
 
 typedef enum
-{ sink_none, sink_const, sink_const_shallow, sink_file, sink_tracer } sink_opt_t;
+{ sink_none, sink_const, sink_const_shallow, sink_file, sink_generic_tracer } sink_opt_t;
 
 typedef struct
 {
@@ -42,7 +42,7 @@ typedef struct
    double sink_depth;           /* depth threshold for sink_const_shallow, units = cm (same as model's z_t) */
    char *sink_file_name;
    char *sink_field_name;
-   char *sink_tracer_name;
+   char *sink_generic_tracer_name;
 
    char *pv_file_name;
    char *pv_field_name;
