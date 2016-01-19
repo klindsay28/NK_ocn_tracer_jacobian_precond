@@ -18,6 +18,32 @@ handle_nc_error (char *subname, char *cdf_subname, char *msg, int status)
 /******************************************************************************/
 
 int
+var_exists_in_file (char *fname, char *varname, int *retval)
+{
+   char *subname = "var_exists_in_file";
+   int status;
+   int ncid;
+   int varid;
+
+   if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
+      return handle_nc_error (subname, "nc_open", fname, status);
+
+   status = nc_inq_varid (ncid, varname, &varid);
+
+   if ((status != NC_NOERR) && (status != NC_ENOTVAR))
+      return handle_nc_error (subname, "nc_inq_varid", varname, status);
+
+   *retval = (status == NC_NOERR);
+
+   if ((status = nc_close (ncid)))
+      return handle_nc_error (subname, "nc_close", fname, status);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
 get_var_1d_int (char *fname, char *varname, int *field)
 {
    char *subname = "get_var_1d_int";

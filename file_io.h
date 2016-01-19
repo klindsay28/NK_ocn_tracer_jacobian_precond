@@ -5,6 +5,8 @@
 
 int handle_nc_error (char *subname, char *cdf_subname, char *msg, int status);
 
+int var_exists_in_file (char *fname, char *varname, int *retval);
+
 int get_var_1d_int (char *fname, char *varname, int *field);
 int get_var_2d_int (char *fname, char *varname, int **field);
 int get_var_3d_int (char *fname, char *varname, int ***field);
