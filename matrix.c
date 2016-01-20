@@ -822,34 +822,34 @@ init_matrix (void)
          }
          coef_ind_vmix_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (vmix_opt == vmix_matrix_file) {
-            int kk;
+            int k2;
 
-            for (kk = 0; kk < KMT[j][i]; kk++) {
+            for (k2 = 0; k2 < KMT[j][i]; k2++) {
                nzval_row_wise[coef_ind] = 0.0;
-               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k2][j][i];
                coef_ind++;
             }
          }
          coef_ind_sink_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
-            int kk;
+            int k2;
             int kmax =
                (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
                 -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
 
-            for (kk = (k <= kmax) ? k - 1 : kmax - 1; kk >= 0; kk--) {
+            for (k2 = (k <= kmax) ? k - 1 : kmax - 1; k2 >= 0; k2--) {
                nzval_row_wise[coef_ind] = 0.0;
-               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k2][j][i];
                coef_ind++;
             }
          }
          coef_ind_sink_other_tracers[tracer_ind][tracer_state_ind] = coef_ind;
          for (tracer_ind_2 = 0; tracer_ind_2 < tracer_state_len; tracer_ind_2++) {
-            if (tracer_ind_2 != tracer_ind) {
-               nzval_row_wise[coef_ind] = 0.0;
-               colind[coef_ind] = (tracer_ind_2 - 1) * tracer_state_len + int3_to_tracer_state_ind[k][j][i];
-               coef_ind++;
-            }
+            if (tracer_ind_2 == tracer_ind)
+               continue;
+            nzval_row_wise[coef_ind] = 0.0;
+            colind[coef_ind] = (tracer_ind_2 - 1) * tracer_state_len + int3_to_tracer_state_ind[k][j][i];
+            coef_ind++;
          }
       }
    }
@@ -2288,7 +2288,7 @@ add_vmix_matrix_file (void)
             int i;
             int j;
             int k;
-            int kk;
+            int k2;
             int coef_ind;
 
             i = tracer_state_ind_to_int3[tracer_state_ind].i;
@@ -2297,8 +2297,8 @@ add_vmix_matrix_file (void)
 
             coef_ind = coef_ind_vmix_non_nbr[tracer_ind][tracer_state_ind];
 
-            for (kk = 0; kk < KMT[j][i]; kk++) {
-               if (kk == kprime)
+            for (k2 = 0; k2 < KMT[j][i]; k2++) {
+               if (k2 == kprime)
                   nzval_row_wise[coef_ind] += vmix_matrix_var[k][j][i] * delta_t;
                coef_ind++;
             }
@@ -2565,7 +2565,7 @@ add_sink_generic_tracer (void)
       return 1;
    }
 
-   if ((SINK_RATE_FIELDS_SHALLOWER = malloc ((size_t) km * sizeof (double ***))) == NULL) {;
+   if ((SINK_RATE_FIELDS_SHALLOWER = malloc ((size_t) km * sizeof (double ***))) == NULL) {
       fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD_SAME_LEVEL\n", subname);
       return 1;
    }
@@ -2574,6 +2574,9 @@ add_sink_generic_tracer (void)
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
+         int kmax =
+            (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
+             -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
 
          /* read and add pure diagonal term, if present in input file */
 
@@ -2605,7 +2608,7 @@ add_sink_generic_tracer (void)
 
          /* allocate space for and read in corresponding file variables, if present in input file */
 
-         for (k2 = 0; k2 < km; k2++) {
+         for (k2 = 0; k2 < kmax; k2++) {
             sprintf (field_name, "d_J_%s_d_%s_k_%02d", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
                      per_tracer_opt[tracer_ind].sink_generic_tracer_name, k2);
             if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
@@ -2625,9 +2628,22 @@ add_sink_generic_tracer (void)
             }
          }
 
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            int coef_ind = coef_ind_sink_non_nbr[tracer_ind][tracer_state_ind];
+            for (k2 = (k <= kmax) ? k - 1 : kmax - 1; k2 >= 0; k2--) {
+               if (SINK_RATE_FIELDS_SHALLOWER[k2] != NULL) {
+                  nzval_row_wise[coef_ind] += SINK_RATE_FIELDS_SHALLOWER[k2][k][j][i];
+               }
+               coef_ind++;
+            }
+         }
+
          /* deallocate allocated space */
 
-         for (k2 = 0; k2 < km; k2++) {
+         for (k2 = 0; k2 < kmax; k2++) {
             if (SINK_RATE_FIELDS_SHALLOWER[k2] != NULL) {
                free_3d_double (SINK_RATE_FIELDS_SHALLOWER[k2]);
                SINK_RATE_FIELDS_SHALLOWER[k2] = NULL;
@@ -2646,6 +2662,100 @@ add_sink_generic_tracer (void)
 
    free (SINK_RATE_FIELDS_SHALLOWER);
    free_3d_double (SINK_RATE_FIELD_SAME_LEVEL);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_sink_coupled_tracers (void)
+{
+   char *subname = "add_sink_coupled_tracers";
+   int tracer_ind;
+   int tracer_ind_2;
+   int sink_var_exists;
+   char *field_name;
+   double ****SINK_RATE_FIELDS;
+   int tracer_state_ind;
+
+   char *OCMIP_BGC_PO4_DOP_names[] = { "OCMIP_BGC_PO4", "OCMIP_BGC_PO4_DOP" };
+   char **tracer_names = NULL;
+
+   switch (coupled_tracer_opt) {
+   case coupled_tracer_none:
+      return 0;
+   case coupled_tracer_OCMIP_BGC_PO4_DOP:
+      tracer_names = OCMIP_BGC_PO4_DOP_names;
+      break;
+   }
+
+   if (tracer_names != NULL) {
+      if ((SINK_RATE_FIELDS = malloc ((size_t) coupled_tracer_cnt * sizeof (double ***))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELDS\n", subname);
+         return 1;
+      }
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++)
+         SINK_RATE_FIELDS[tracer_ind] = NULL;
+
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+
+         /* allocate space for and read in corresponding file variables, if present in input file */
+
+         for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
+            if (tracer_ind_2 == tracer_ind)
+               continue;
+
+            if ((field_name = malloc (8 + strlen (tracer_names[tracer_ind]) + strlen (tracer_names[tracer_ind_2]))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for field_name\n", subname);
+               return 1;
+            }
+            sprintf (field_name, "d_J_%s_d_%s", tracer_names[tracer_ind], tracer_names[tracer_ind_2]);
+            if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
+               fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
+                        field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+               return 1;
+            }
+            if (sink_var_exists) {
+               if ((SINK_RATE_FIELDS[tracer_ind] = malloc_3d_double (km, jmt, imt)) == NULL) {
+                  fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELDS[%d]\n", subname, tracer_ind);
+                  return 1;
+               }
+               if (get_var_3d_double (per_tracer_opt[tracer_ind].sink_file_name, field_name, SINK_RATE_FIELDS[tracer_ind]))
+                  return 1;
+            } else {
+               SINK_RATE_FIELDS[tracer_ind] = NULL;
+            }
+
+            free (field_name);
+         }
+
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            int coef_ind = coef_ind_sink_other_tracers[tracer_ind][tracer_state_ind];
+            for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
+               if (tracer_ind_2 == tracer_ind)
+                  continue;
+               if (SINK_RATE_FIELDS[tracer_ind_2] != NULL) {
+                  nzval_row_wise[coef_ind] += SINK_RATE_FIELDS[tracer_ind_2][k][j][i];
+               }
+               coef_ind++;
+            }
+         }
+
+         /* deallocate allocated space */
+
+         for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
+            if (SINK_RATE_FIELDS[tracer_ind_2] != NULL) {
+               free_3d_double (SINK_RATE_FIELDS[tracer_ind_2]);
+               SINK_RATE_FIELDS[tracer_ind_2] = NULL;
+            }
+         }
+      }
+      free (SINK_RATE_FIELDS);
+   }
 
    return 0;
 }
@@ -2887,6 +2997,9 @@ gen_sparse_matrix (double day_cnt)
       return 1;
 
    if (add_sink_generic_tracer ())
+      return 1;
+
+   if (add_sink_coupled_tracers ())
       return 1;
 
    if (add_pv ())
