@@ -2626,10 +2626,90 @@ int
 add_sink_generic_tracer (void)
 {
    char *subname = "add_sink_generic_tracer";
+   int k2;
    int tracer_ind;
+   int flat_ind_offset;
+   int sink_var_exists;
+   char *field_name;
+   double ***SINK_RATE_FIELD_SAME_LEVEL;
+   double ****SINK_RATE_FIELDS_SHALLOWER;
+   int tracer_state_ind;
+
+   if ((SINK_RATE_FIELD_SAME_LEVEL = malloc_3d_double (km, jmt, imt)) == NULL) {
+      fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD_SAME_LEVEL\n", subname);
+      return 1;
+   }
+
+   if ((SINK_RATE_FIELDS_SHALLOWER = malloc ((size_t) km * sizeof (double ***))) == NULL) {;
+      fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD_SAME_LEVEL\n", subname);
+      return 1;
+   }
+   for (k2 = 0; k2 < km; k2++)
+      SINK_RATE_FIELDS_SHALLOWER[k2] = NULL;
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
       if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
+
+         /* read and add pure diagonal term, if present in input file */
+
+         if ((field_name = malloc (13 + 2 * strlen (per_tracer_opt[tracer_ind].sink_generic_tracer_name))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for field_name for tracer %s\n", subname,
+                     per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+            return 1;
+         }
+         sprintf (field_name, "d_J_%s_d_%s", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
+                  per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+         if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
+            fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
+                     field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+            return 1;
+         }
+         if (sink_var_exists) {
+            if (get_var_3d_double (per_tracer_opt[tracer_ind].sink_file_name, field_name, SINK_RATE_FIELD_SAME_LEVEL))
+               return 1;
+            for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+               int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+               int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+               int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD_SAME_LEVEL[k][j][i];
+            }
+         }
+
+         /* process levels shallower than each specific level */
+
+         /* allocate space for and read in corresponding file variables, if present in input file */
+
+         for (k2 = 0; k2 < km; k2++) {
+            sprintf (field_name, "d_J_%s_d_%s_k_%02d", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
+                     per_tracer_opt[tracer_ind].sink_generic_tracer_name, k2);
+            if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
+               fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
+                        field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+               return 1;
+            }
+            if (sink_var_exists) {
+               if ((SINK_RATE_FIELDS_SHALLOWER[k2] = malloc_3d_double (km, jmt, imt)) == NULL) {
+                  fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELDS_SHALLOWER[%d]\n", subname, k2);
+                  return 1;
+               }
+               if (get_var_3d_double (per_tracer_opt[tracer_ind].sink_file_name, field_name, SINK_RATE_FIELDS_SHALLOWER[k2]))
+                  return 1;
+            } else {
+               SINK_RATE_FIELDS_SHALLOWER[k2] = NULL;
+            }
+         }
+
+         /* deallocate allocated space */
+
+         for (k2 = 0; k2 < km; k2++) {
+            if (SINK_RATE_FIELDS_SHALLOWER[k2] != NULL) {
+               free_3d_double (SINK_RATE_FIELDS_SHALLOWER[k2]);
+               SINK_RATE_FIELDS_SHALLOWER[k2] = NULL;
+            }
+         }
+
+         free (field_name);
 
          if (dbg_lvl > 1) {
             printf ("generic tracer sink added for tracer %d, %s\n\n", tracer_ind,
@@ -2638,6 +2718,9 @@ add_sink_generic_tracer (void)
          }
       }
    }
+
+   free (SINK_RATE_FIELDS_SHALLOWER);
+   free_3d_double (SINK_RATE_FIELD_SAME_LEVEL);
 
    return 0;
 }
