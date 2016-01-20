@@ -15,11 +15,21 @@
  *    colind : column index for each matrix value in nzval_row_wise
  *    rowptr : index into nzval_row_wise and colind of starting location of entries for jth row
  *
+ *    The following arrays are indices into nzval_row_wise and colind of specific categories of entries.
+ *
+ *    coef_ind_self : index of term for tracer cell value's dependence on itself
+ *    coef_ind_adv_non_nbr : index of terms for non-neighbor advective dependencies
+ *    coef_ind_hmix_non_nbr : index of terms for non-neighbor hmix dependencies
+ *    coef_ind_vmix_non_nbr : index of terms for non-neighbor vmix dependencies
+ *    coef_ind_sink_non_nbr : index of terms for non-neighbor sink dependencies
+ *    coef_ind_sink_other_tracers : index of terms for dependencies on other tracers
+ *
  * related functions
  *    comp_flat_len () : compute flat_len
  *    comp_nnz () : compute nnz
  *       this uses the functions adv_non_nbr_cnt, hmix_non_nbr_cnt, vmix_non_nbr_cnt, sink_non_nbr_cnt
- *    init_matrix () : allocate matrix variables, generate colind, rowptr, and initialize nzval_row_wise to zero
+ *    allocate_matrix_arrays() : allocate matrix variables
+ *    init_matrix () : generate matrix index arrays, initialize nzval_row_wise to zero
  *
  *    add_adv () : add advection related terms to matrix
  *    add_hmix () : add lateral mixing related terms to matrix
@@ -76,6 +86,12 @@ int nnz;
 double *nzval_row_wise;
 int_t *colind;
 int_t *rowptr;
+int_t **coef_ind_self;
+int_t **coef_ind_adv_non_nbr;
+int_t **coef_ind_hmix_non_nbr;
+int_t **coef_ind_vmix_non_nbr;
+int_t **coef_ind_sink_non_nbr;
+int_t **coef_ind_sink_other_tracers;
 
 double delta_t;
 double year_cnt;
@@ -504,7 +520,6 @@ sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
 void
 comp_nnz (void)
 {
-   char *subname = "comp_nnz";
    int tracer_ind;
    int tracer_state_ind;
    int i;
@@ -561,6 +576,82 @@ comp_nnz (void)
 
 /******************************************************************************/
 
+int
+allocate_matrix_arrays (void)
+{
+   char *subname = "allocate_matrix_arrays";
+   int tracer_ind;
+
+   if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for nzval_row_wise\n", subname);
+      return 1;
+   }
+   if ((colind = malloc ((size_t) nnz * sizeof (int_t))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for colind\n", subname);
+      return 1;
+   }
+   if ((rowptr = malloc ((size_t) (flat_len + 1) * sizeof (int_t))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for rowptr\n", subname);
+      return 1;
+   }
+
+   if ((coef_ind_self = malloc ((size_t) coupled_tracer_cnt * sizeof (int_t *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for coef_ind_self\n", subname);
+      return 1;
+   }
+   if ((coef_ind_adv_non_nbr = malloc ((size_t) coupled_tracer_cnt * sizeof (int_t *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for coef_ind_adv_non_nbr\n", subname);
+      return 1;
+   }
+   if ((coef_ind_hmix_non_nbr = malloc ((size_t) coupled_tracer_cnt * sizeof (int_t *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for coef_ind_hmix_non_nbr\n", subname);
+      return 1;
+   }
+   if ((coef_ind_vmix_non_nbr = malloc ((size_t) coupled_tracer_cnt * sizeof (int_t *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for coef_ind_vmix_non_nbr\n", subname);
+      return 1;
+   }
+   if ((coef_ind_sink_non_nbr = malloc ((size_t) coupled_tracer_cnt * sizeof (int_t *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for coef_ind_sink_non_nbr\n", subname);
+      return 1;
+   }
+   if ((coef_ind_sink_other_tracers = malloc ((size_t) coupled_tracer_cnt * sizeof (int_t *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for coef_ind_sink_other_tracers\n", subname);
+      return 1;
+   }
+
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      if ((coef_ind_self[tracer_ind] = malloc ((size_t) tracer_state_len * sizeof (int_t))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for coef_ind_self[%d]\n", subname, tracer_ind);
+         return 1;
+      }
+      if ((coef_ind_adv_non_nbr[tracer_ind] = malloc ((size_t) tracer_state_len * sizeof (int_t))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for coef_ind_adv_non_nbr[%d]\n", subname, tracer_ind);
+         return 1;
+      }
+      if ((coef_ind_hmix_non_nbr[tracer_ind] = malloc ((size_t) tracer_state_len * sizeof (int_t))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for coef_ind_hmix_non_nbr[%d]\n", subname, tracer_ind);
+         return 1;
+      }
+      if ((coef_ind_vmix_non_nbr[tracer_ind] = malloc ((size_t) tracer_state_len * sizeof (int_t))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for coef_ind_vmix_non_nbr[%d]\n", subname, tracer_ind);
+         return 1;
+      }
+      if ((coef_ind_sink_non_nbr[tracer_ind] = malloc ((size_t) tracer_state_len * sizeof (int_t))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for coef_ind_sink_non_nbr[%d]\n", subname, tracer_ind);
+         return 1;
+      }
+      if ((coef_ind_sink_other_tracers[tracer_ind] = malloc ((size_t) tracer_state_len * sizeof (int_t))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for coef_ind_sink_other_tracers[%d]\n", subname, tracer_ind);
+         return 1;
+      }
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
 /* initialize matrix values to zero and set up sparsity pattern arrays */
 
 int
@@ -597,6 +688,7 @@ init_matrix (void)
          im2 = (im1 > 0) ? im1 - 1 : imt - 1;
 
          /* cell itself */
+         coef_ind_self[tracer_ind][tracer_state_ind] = coef_ind;
          nzval_row_wise[coef_ind] = 0.0;
          colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j][i];
          coef_ind++;
@@ -636,6 +728,7 @@ init_matrix (void)
             colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k][j - 1][i];
             coef_ind++;
          }
+         coef_ind_adv_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (adv_opt == adv_upwind3) {
             /* cell 2 level shallower */
             if (k - 2 >= 0) {
@@ -674,6 +767,7 @@ init_matrix (void)
                coef_ind++;
             }
          }
+         coef_ind_hmix_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (hmix_opt == hmix_isop_file) {
             /* shallower & east */
             if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
@@ -724,6 +818,7 @@ init_matrix (void)
                coef_ind++;
             }
          }
+         coef_ind_vmix_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (vmix_opt == vmix_matrix_file) {
             int kk;
 
@@ -733,6 +828,7 @@ init_matrix (void)
                coef_ind++;
             }
          }
+         coef_ind_sink_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
             if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4") == 0) {
                int kk;
@@ -744,6 +840,7 @@ init_matrix (void)
                }
             }
          }
+         coef_ind_sink_other_tracers[tracer_ind][tracer_state_ind] = coef_ind;
          for (tracer_ind_2 = 0; tracer_ind_2 < tracer_state_len; tracer_ind_2++) {
             if (tracer_ind_2 != tracer_ind) {
                nzval_row_wise[coef_ind] = 0.0;
@@ -933,14 +1030,10 @@ load_WVEL (double ***WVEL)
 void
 add_UTE_coeffs (double ***UTE)
 {
-   char *subname = "add_UTE_coeffs";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
    double east_self_interp_w;
    double west_self_interp_w;
-
-   coef_ind = 0;
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -949,6 +1042,7 @@ add_UTE_coeffs (double ***UTE)
          int im1;
          int j;
          int k;
+         int coef_ind;
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -966,6 +1060,8 @@ add_UTE_coeffs (double ***UTE)
             west_self_interp_w = 0.5;
             break;
          }
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
          /* cell itself */
          if (k < KMT[j][ip1])
@@ -995,18 +1091,8 @@ add_UTE_coeffs (double ***UTE)
          /* cell 1 unit south */
          if (k < KMT[j - 1][i])
             coef_ind++;
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 }
 
 /******************************************************************************/
@@ -1014,14 +1100,11 @@ add_UTE_coeffs (double ***UTE)
 void
 add_VTN_coeffs (double ***VTN)
 {
-   char *subname = "add_VTN_coeffs";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
    double north_self_interp_w;
    double south_self_interp_w;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -1029,6 +1112,7 @@ add_VTN_coeffs (double ***VTN)
          int im1;
          int j;
          int k;
+         int coef_ind;
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -1046,6 +1130,8 @@ add_VTN_coeffs (double ***VTN)
             south_self_interp_w = 0.5;
             break;
          }
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
          /* cell itself */
          if (k < KMT[j + 1][i])
@@ -1075,18 +1161,8 @@ add_VTN_coeffs (double ***VTN)
             nzval_row_wise[coef_ind] += (1.0 - south_self_interp_w) * VTN[k][j - 1][i] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 }
 
 /******************************************************************************/
@@ -1094,14 +1170,11 @@ add_VTN_coeffs (double ***VTN)
 void
 add_WVEL_coeffs (double ***WVEL)
 {
-   char *subname = "add_WVEL_coeffs";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
    double top_self_interp_w;
    double bot_self_interp_w;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -1109,6 +1182,7 @@ add_WVEL_coeffs (double ***WVEL)
          int im1;
          int j;
          int k;
+         int coef_ind;
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -1127,6 +1201,8 @@ add_WVEL_coeffs (double ***WVEL)
             bot_self_interp_w = 0.5;
             break;
          }
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
          /* cell itself */
          if (k - 1 >= 0)
@@ -1156,18 +1232,8 @@ add_WVEL_coeffs (double ***WVEL)
          /* cell 1 unit south */
          if (k < KMT[j - 1][i])
             coef_ind++;
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 }
 
 /******************************************************************************/
@@ -1247,12 +1313,9 @@ load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 void
 add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 {
-   char *subname = "add_UTE_coeffs_upwind3";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -1262,6 +1325,7 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
          int im2;
          int j;
          int k;
+         int coef_ind;
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -1270,6 +1334,8 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
          im1 = (i > 0) ? i - 1 : imt - 1;
          ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
          im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
          /* cell itself */
          /* advection through east face */
@@ -1322,6 +1388,8 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
          if (k < KMT[j - 1][i])
             coef_ind++;
 
+         coef_ind = coef_ind_adv_non_nbr[tracer_ind][tracer_state_ind];
+
          /* cell 2 level shallower */
          if (k - 2 >= 0)
             coef_ind++;
@@ -1346,18 +1414,8 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
          /* cell 2 unit south */
          if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
             coef_ind++;
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 }
 
 /******************************************************************************/
@@ -1365,12 +1423,9 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 void
 add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 {
-   char *subname = "add_VTN_coeffs_upwind3";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -1380,6 +1435,7 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
          int im2;
          int j;
          int k;
+         int coef_ind;
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -1388,6 +1444,8 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
          im1 = (i > 0) ? i - 1 : imt - 1;
          ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
          im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
          /* cell itself */
          /* advection through north face */
@@ -1440,6 +1498,8 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
             coef_ind++;
          }
 
+         coef_ind = coef_ind_adv_non_nbr[tracer_ind][tracer_state_ind];
+
          /* cell 2 level shallower */
          if (k - 2 >= 0)
             coef_ind++;
@@ -1464,18 +1524,8 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
             nzval_row_wise[coef_ind] += (-0.125) * VTN_POS[k][j - 1][i] / TAREA[j][i] * delta_t;
             coef_ind++;
          }
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 }
 
 /******************************************************************************/
@@ -1486,7 +1536,6 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    char *subname = "add_WVEL_coeffs_upwind3";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
    double *dzc_tmp;
    double *dzc;
    double *talfzp;
@@ -1560,7 +1609,6 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    tbetzm[km - 1] = 0.0;
    tdelzm[km - 1] = 0.0;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -1569,6 +1617,7 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
          int ip2;
          int im2;
          int j;
+         int coef_ind;
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -1577,6 +1626,8 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
          im1 = (i > 0) ? i - 1 : imt - 1;
          ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
          im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
          /* cell itself */
          /* advection through top face */
@@ -1629,6 +1680,8 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
          if (k < KMT[j - 1][i])
             coef_ind++;
 
+         coef_ind = coef_ind_adv_non_nbr[tracer_ind][tracer_state_ind];
+
          /* cell 2 level shallower */
          if (k - 2 >= 0) {
             /* advection through top face */
@@ -1653,18 +1706,8 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
          /* cell 2 unit south */
          if ((j - 2 >= 0) && (k < KMT[j - 2][i]))
             coef_ind++;
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
    free (dzc_tmp);
    free (talfzp);
    free (tbetzp);
@@ -1753,7 +1796,6 @@ add_hmix_isop_file (void)
 
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
 
    if ((IRF = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for IRF\n", subname);
@@ -1768,7 +1810,6 @@ add_hmix_isop_file (void)
             if (get_var_3d_double (circ_fname, IRF_name, IRF))
                return 1;
 
-            coef_ind = 0;
             for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
                for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
                   int i;
@@ -1776,12 +1817,15 @@ add_hmix_isop_file (void)
                   int im1;
                   int j;
                   int k;
+                  int coef_ind;
 
                   i = tracer_state_ind_to_int3[tracer_state_ind].i;
                   j = tracer_state_ind_to_int3[tracer_state_ind].j;
                   k = tracer_state_ind_to_int3[tracer_state_ind].k;
                   ip1 = (i < imt - 1) ? i + 1 : 0;
                   im1 = (i > 0) ? i - 1 : imt - 1;
+
+                  coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
 
                   /* cell itself */
                   if ((i % 4 == iprime) && (j % 3 == jprime) && (k % 3 == kprime))
@@ -1824,7 +1868,7 @@ add_hmix_isop_file (void)
                      coef_ind++;
                   }
 
-                  coef_ind += adv_non_nbr_cnt (k, j, i);
+                  coef_ind = coef_ind_hmix_non_nbr[tracer_ind][tracer_state_ind];
 
                   /* shallower & east */
                   if ((k - 1 >= 0) && (k - 1 < KMT[j][ip1])) {
@@ -1878,16 +1922,8 @@ add_hmix_isop_file (void)
                         nzval_row_wise[coef_ind] += IRF[k][j][i] * delta_t;
                      coef_ind++;
                   }
-
-                  coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-                  coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-                  coef_ind += coupled_tracer_cnt - 1;
                }
             }
-            if (dbg_lvl > 1)
-               printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
          }
 
    free_3d_double (IRF);
@@ -1910,7 +1946,6 @@ add_hmix_hor_file (void)
 
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
 
    if ((KAPPA = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for KAPPA\n", subname);
@@ -1965,7 +2000,6 @@ add_hmix_hor_file (void)
    if (get_var_2d_double (circ_fname, "HTN", HTN))
       return 1;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -1973,6 +2007,7 @@ add_hmix_hor_file (void)
          int im1;
          int j;
          int k;
+         int coef_ind;
 
          double ce;
          double cw;
@@ -2010,6 +2045,8 @@ add_hmix_hor_file (void)
          else
             cs = 0.0;
 
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+
          /* cell itself */
          nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
          coef_ind++;
@@ -2039,18 +2076,8 @@ add_hmix_hor_file (void)
             nzval_row_wise[coef_ind] += cs;
             coef_ind++;
          }
-
-         coef_ind += adv_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 
    free_2d_double (HTN);
    free_2d_double (HUW);
@@ -2074,7 +2101,6 @@ add_hmix_const (void)
 
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
    double ah;
 
    ah = 4.0e6;
@@ -2106,7 +2132,6 @@ add_hmix_const (void)
    if (get_var_2d_double (circ_fname, "HTN", HTN))
       return 1;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
@@ -2114,6 +2139,7 @@ add_hmix_const (void)
          int im1;
          int j;
          int k;
+         int coef_ind;
 
          double ce;
          double cw;
@@ -2150,6 +2176,8 @@ add_hmix_const (void)
          else
             cs = 0.0;
 
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+
          /* cell itself */
          nzval_row_wise[coef_ind] -= (ce + cw + cn + cs);
          coef_ind++;
@@ -2179,18 +2207,8 @@ add_hmix_const (void)
             nzval_row_wise[coef_ind] += cs;
             coef_ind++;
          }
-
-         coef_ind += adv_non_nbr_cnt (k, j, i);
-
-         coef_ind += vmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 
    free_2d_double (HTN);
    free_2d_double (HUW);
@@ -2205,8 +2223,6 @@ add_hmix_const (void)
 int
 add_hmix (void)
 {
-   char *subname = "add_hmix";
-
    switch (hmix_opt) {
    case hmix_none:
       break;
@@ -2248,7 +2264,6 @@ add_vmix_matrix_file (void)
    int kprime;
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
 
    if ((vmix_matrix_var = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for vmix_matrix_var\n", subname);
@@ -2265,61 +2280,28 @@ add_vmix_matrix_file (void)
       if (get_var_3d_double (circ_fname, varname, vmix_matrix_var))
          return 1;
 
-      coef_ind = 0;
       for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             int i;
-            int ip1;
-            int im1;
             int j;
             int k;
             int kk;
+            int coef_ind;
 
             i = tracer_state_ind_to_int3[tracer_state_ind].i;
             j = tracer_state_ind_to_int3[tracer_state_ind].j;
             k = tracer_state_ind_to_int3[tracer_state_ind].k;
-            ip1 = (i < imt - 1) ? i + 1 : 0;
-            im1 = (i > 0) ? i - 1 : imt - 1;
 
-            /* cell itself */
-            coef_ind++;
-            /* cell 1 level shallower */
-            if (k - 1 >= 0)
-               coef_ind++;
-            /* cell 1 level deeper */
-            if (k + 1 < KMT[j][i])
-               coef_ind++;
-            /* cell 1 unit east */
-            if (k < KMT[j][ip1])
-               coef_ind++;
-            /* cell 1 unit west */
-            if (k < KMT[j][im1])
-               coef_ind++;
-            /* cell 1 unit north */
-            if (k < KMT[j + 1][i])
-               coef_ind++;
-            /* cell 1 unit south */
-            if (k < KMT[j - 1][i])
-               coef_ind++;
-
-            coef_ind += adv_non_nbr_cnt (k, j, i);
-
-            coef_ind += hmix_non_nbr_cnt (k, j, i);
+            coef_ind = coef_ind_vmix_non_nbr[tracer_ind][tracer_state_ind];
 
             for (kk = 0; kk < KMT[j][i]; kk++) {
                if (kk == kprime)
                   nzval_row_wise[coef_ind] += vmix_matrix_var[k][j][i] * delta_t;
                coef_ind++;
             }
-
-            coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-            coef_ind += coupled_tracer_cnt - 1;
          }
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 
    free_3d_double (vmix_matrix_var);
 
@@ -2340,7 +2322,6 @@ add_vmix_file (void)
 
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
 
    if ((VDC_TOTAL = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for VDC_TOTAL\n", subname);
@@ -2368,14 +2349,12 @@ add_vmix_file (void)
          for (i = 0; i < imt; i++)
             VDC_TOTAL[k][j][i] += VDC_READ[k][j][i];
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
-         int ip1;
-         int im1;
          int j;
          int k;
+         int coef_ind;
 
          double ct;
          double cb;
@@ -2383,8 +2362,6 @@ add_vmix_file (void)
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
          k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         ip1 = (i < imt - 1) ? i + 1 : 0;
-         im1 = (i > 0) ? i - 1 : imt - 1;
 
          /* cell 1 level shallower */
          if (k - 1 >= 0)
@@ -2398,6 +2375,8 @@ add_vmix_file (void)
          else
             cb = 0.0;
 
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+
          /* cell itself */
          nzval_row_wise[coef_ind] -= (ct + cb);
          coef_ind++;
@@ -2406,35 +2385,8 @@ add_vmix_file (void)
             nzval_row_wise[coef_ind] += ct;
             coef_ind++;
          }
-         /* cell 1 level deeper */
-         if (k + 1 < KMT[j][i]) {
-            nzval_row_wise[coef_ind] += cb;
-            coef_ind++;
-         }
-         /* cell 1 unit east */
-         if (k < KMT[j][ip1])
-            coef_ind++;
-         /* cell 1 unit west */
-         if (k < KMT[j][im1])
-            coef_ind++;
-         /* cell 1 unit north */
-         if (k < KMT[j + 1][i])
-            coef_ind++;
-         /* cell 1 unit south */
-         if (k < KMT[j - 1][i])
-            coef_ind++;
-
-         coef_ind += adv_non_nbr_cnt (k, j, i);
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 
    free_3d_double (VDC_READ);
    free_3d_double (VDC_TOTAL);
@@ -2447,22 +2399,18 @@ add_vmix_file (void)
 void
 add_vmix_const (void)
 {
-   char *subname = "add_vmix_const";
    int tracer_ind;
    int tracer_state_ind;
-   int coef_ind;
    double vdc;
 
    vdc = 0.1;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          int i;
-         int ip1;
-         int im1;
          int j;
          int k;
+         int coef_ind;
 
          double ct;
          double cb;
@@ -2470,8 +2418,6 @@ add_vmix_const (void)
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
          k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         ip1 = (i < imt - 1) ? i + 1 : 0;
-         im1 = (i > 0) ? i - 1 : imt - 1;
 
          /* cell 1 level shallower */
          if (k - 1 >= 0)
@@ -2485,6 +2431,8 @@ add_vmix_const (void)
          else
             cb = 0.0;
 
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+
          /* cell itself */
          nzval_row_wise[coef_ind] -= (ct + cb);
          coef_ind++;
@@ -2498,30 +2446,8 @@ add_vmix_const (void)
             nzval_row_wise[coef_ind] += cb;
             coef_ind++;
          }
-         /* cell 1 unit east */
-         if (k < KMT[j][ip1])
-            coef_ind++;
-         /* cell 1 unit west */
-         if (k < KMT[j][im1])
-            coef_ind++;
-         /* cell 1 unit north */
-         if (k < KMT[j + 1][i])
-            coef_ind++;
-         /* cell 1 unit south */
-         if (k < KMT[j - 1][i])
-            coef_ind++;
-
-         coef_ind += adv_non_nbr_cnt (k, j, i);
-
-         coef_ind += hmix_non_nbr_cnt (k, j, i);
-
-         coef_ind += sink_non_nbr_cnt (tracer_ind, k, j, i);
-
-         coef_ind += coupled_tracer_cnt - 1;
       }
    }
-   if (dbg_lvl > 1)
-      printf ("coef_ind = %d, subname = %s\n", coef_ind, subname);
 }
 
 /******************************************************************************/
@@ -2530,8 +2456,6 @@ add_vmix_const (void)
 int
 add_vmix (void)
 {
-   char *subname = "add_vmix";
-
    switch (vmix_opt) {
    case vmix_matrix_file:
       if (add_vmix_matrix_file ())
@@ -2556,25 +2480,22 @@ add_vmix (void)
 
 /******************************************************************************/
 
-/* from sparsity pattern, we know that coef_ind for diagonal term for nth tracer is rowptr[offset + tracer_state_ind] */
-
 int
 add_sink_pure_diag (void)
 {
    char *subname = "add_sink_pure_diag";
    int tracer_ind;
-   int flat_ind_offset;
    int tracer_state_ind;
    double ***SINK_RATE_FIELD;
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
       switch (per_tracer_opt[tracer_ind].sink_opt) {
       case sink_none:
          break;
       case sink_const:
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+            int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+            nzval_row_wise[coef_ind] += -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
          }
          if (dbg_lvl > 1) {
             printf ("sink const (%e) added for tracer %d\n\n", per_tracer_opt[tracer_ind].sink_rate, tracer_ind);
@@ -2584,8 +2505,9 @@ add_sink_pure_diag (void)
       case sink_const_shallow:
          for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
             if (z_t[k] < per_tracer_opt[tracer_ind].sink_depth)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
+               nzval_row_wise[coef_ind] += -year_cnt * per_tracer_opt[tracer_ind].sink_rate;
          }
          if (dbg_lvl > 1) {
             printf ("sink const shallow (%e,%e) added for tracer %d\n\n", per_tracer_opt[tracer_ind].sink_depth,
@@ -2605,7 +2527,8 @@ add_sink_pure_diag (void)
             int i = tracer_state_ind_to_int3[tracer_state_ind].i;
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-            nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD[k][j][i];
+            int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+            nzval_row_wise[coef_ind] += -year_cnt * SINK_RATE_FIELD[k][j][i];
          }
          free_3d_double (SINK_RATE_FIELD);
          if (dbg_lvl > 1) {
@@ -2628,7 +2551,6 @@ add_sink_generic_tracer (void)
    char *subname = "add_sink_generic_tracer";
    int k2;
    int tracer_ind;
-   int flat_ind_offset;
    int sink_var_exists;
    char *field_name;
    double ***SINK_RATE_FIELD_SAME_LEVEL;
@@ -2648,7 +2570,6 @@ add_sink_generic_tracer (void)
       SINK_RATE_FIELDS_SHALLOWER[k2] = NULL;
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
       if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
 
          /* read and add pure diagonal term, if present in input file */
@@ -2672,7 +2593,8 @@ add_sink_generic_tracer (void)
                int i = tracer_state_ind_to_int3[tracer_state_ind].i;
                int j = tracer_state_ind_to_int3[tracer_state_ind].j;
                int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] = -year_cnt * SINK_RATE_FIELD_SAME_LEVEL[k][j][i];
+               int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+               nzval_row_wise[coef_ind] += -year_cnt * SINK_RATE_FIELD_SAME_LEVEL[k][j][i];
             }
          }
 
@@ -2733,11 +2655,9 @@ add_pv (void)
    char *subname = "add_pv";
    double **PV = NULL;
    int tracer_ind;
-   int flat_ind_offset;
    int tracer_state_ind;
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
       if (per_tracer_opt[tracer_ind].pv_file_name) {
          if (PV != NULL) {
             if ((PV = malloc_2d_double (jmt, imt)) == NULL) {
@@ -2754,8 +2674,9 @@ add_pv (void)
             int i = tracer_state_ind_to_int3[tracer_state_ind].i;
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
             if (k == 0)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] -= PV[j][i] / dz[0] * delta_t;
+               nzval_row_wise[coef_ind] -= PV[j][i] / dz[0] * delta_t;
          }
       }
    }
@@ -2779,13 +2700,9 @@ add_d_SF_d_TRACER (void)
    char *subname = "add_d_SF_d_TRACER";
    double **d_SF_d_TRACER;
    int tracer_ind;
-   int flat_ind_offset;
    int tracer_state_ind;
-   int coef_ind;
 
-   coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
       if (per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name) {
 
          if (d_SF_d_TRACER != NULL) {
@@ -2805,8 +2722,9 @@ add_d_SF_d_TRACER (void)
             int i = tracer_state_ind_to_int3[tracer_state_ind].i;
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
             if (k == 0)
-               nzval_row_wise[rowptr[flat_ind_offset + tracer_state_ind]] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
+               nzval_row_wise[coef_ind] += d_SF_d_TRACER[j][i] / dz[0] * delta_t;
          }
       }
    }
@@ -2941,27 +2859,14 @@ sort_cols_all_rows (void)
 int
 gen_sparse_matrix (double day_cnt)
 {
-   char *subname = "gen_sparse_matrix";
-
    delta_t = 60.0 * 60.0 * 24.0 * day_cnt;
    year_cnt = day_cnt / 365.0;
 
    comp_flat_len ();
    comp_nnz ();
 
-   /* allocate arrays for sparse matrix */
-   if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for nzval_row_wise\n", subname);
+   if (allocate_matrix_arrays ())
       return 1;
-   }
-   if ((colind = malloc ((size_t) nnz * sizeof (int_t))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for colind\n", subname);
-      return 1;
-   }
-   if ((rowptr = malloc ((size_t) (flat_len + 1) * sizeof (int_t))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for rowptr\n", subname);
-      return 1;
-   }
 
    if (init_matrix ())
       return 1;
@@ -3183,7 +3088,25 @@ get_sparse_matrix (char *fname)
 void
 free_sparse_matrix (void)
 {
+   int tracer_ind;
+
    free (rowptr);
    free (colind);
    free (nzval_row_wise);
+
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      free (coef_ind_self[tracer_ind]);
+      free (coef_ind_adv_non_nbr[tracer_ind]);
+      free (coef_ind_hmix_non_nbr[tracer_ind]);
+      free (coef_ind_vmix_non_nbr[tracer_ind]);
+      free (coef_ind_sink_non_nbr[tracer_ind]);
+      free (coef_ind_sink_other_tracers[tracer_ind]);
+   }
+
+   free (coef_ind_self);
+   free (coef_ind_adv_non_nbr);
+   free (coef_ind_hmix_non_nbr);
+   free (coef_ind_vmix_non_nbr);
+   free (coef_ind_sink_non_nbr);
+   free (coef_ind_sink_other_tracers);
 }
