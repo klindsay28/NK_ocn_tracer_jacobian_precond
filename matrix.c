@@ -508,8 +508,10 @@ sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
 
    cnt = 0;
    if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
-      if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4") == 0)
-         cnt = (k <= 10) ? k : 10;
+      int kmax =
+         (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
+          -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
+      cnt = (k <= kmax) ? k : kmax;
    }
 
    return cnt;
@@ -830,14 +832,15 @@ init_matrix (void)
          }
          coef_ind_sink_non_nbr[tracer_ind][tracer_state_ind] = coef_ind;
          if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
-            if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4") == 0) {
-               int kk;
+            int kk;
+            int kmax =
+               (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
+                -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
 
-               for (kk = (k <= 10) ? k - 1 : 10 - 1; kk >= 0; kk--) {
-                  nzval_row_wise[coef_ind] = 0.0;
-                  colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
-                  coef_ind++;
-               }
+            for (kk = (k <= kmax) ? k - 1 : kmax - 1; kk >= 0; kk--) {
+               nzval_row_wise[coef_ind] = 0.0;
+               colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[kk][j][i];
+               coef_ind++;
             }
          }
          coef_ind_sink_other_tracers[tracer_ind][tracer_state_ind] = coef_ind;

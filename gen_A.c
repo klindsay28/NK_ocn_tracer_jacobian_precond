@@ -82,6 +82,7 @@ grow_per_tracer_opt (int prev_tracer_cnt, int new_tracer_cnt)
       per_tracer_opt[tracer_ind].sink_file_name = NULL;
       per_tracer_opt[tracer_ind].sink_field_name = NULL;
       per_tracer_opt[tracer_ind].sink_generic_tracer_name = NULL;
+      per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt = -1;
 
       per_tracer_opt[tracer_ind].pv_file_name = NULL;
       per_tracer_opt[tracer_ind].pv_field_name = NULL;
@@ -285,10 +286,11 @@ read_opt_file ()
                return 1;
             }
             strcpy (per_tracer_opt[tracer_ind].sink_generic_tracer_name, optval);
-            if (strcmp (per_tracer_opt[tracer_ind].sink_generic_tracer_name, "OCMIP_BGC_PO4")) {
-               fprintf (stderr, "unknown tracer name %s for sink_type == sink_generic_tracer in %s\n",
-                        per_tracer_opt[tracer_ind].sink_generic_tracer_name, subname);
-               return 1;
+            if ((optval = strtok (NULL, " \n")) != NULL) {
+               if (parse_to_int (optarg, &per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt)) {
+                  fprintf (stderr, "error parsing sink_generic_tracer_depends_layer_cnt\n");
+                  return 1;
+               }
             }
          }
       } else if (strcmp (optname, "pv") == 0) {
@@ -422,6 +424,7 @@ write_opts (void)
             printf ("   sink_opt                = %s\n", "generic_tracer");
             printf ("   sink_file_name          = %s\n", per_tracer_opt[tracer_ind].sink_file_name);
             printf ("   sink_generic_tracer_name= %s\n", per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+            printf ("   depends_layer_cnt       = %d\n", per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt);
             break;
          }
          printf ("   pv_file_name            = %s\n",

@@ -43,6 +43,7 @@ typedef struct
    char *sink_file_name;
    char *sink_field_name;
    char *sink_generic_tracer_name;
+   int sink_generic_tracer_depends_layer_cnt;
 
    char *pv_file_name;
    char *pv_field_name;
