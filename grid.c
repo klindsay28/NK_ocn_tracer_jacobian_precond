@@ -39,6 +39,11 @@ get_grid_dims (char *fname)
    int dimid;
    size_t dimlen;
 
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
       return handle_nc_error (subname, "nc_open", fname, status);
 
@@ -72,6 +77,11 @@ get_grid_dims (char *fname)
       printf ("km  = %d\n", km);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -85,6 +95,11 @@ get_grid_info (char *circ_fname, char *reg_fname)
    int j;
    int i;
    int ip1;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (get_grid_dims (circ_fname))
       return 1;
@@ -184,6 +199,11 @@ get_grid_info (char *circ_fname, char *reg_fname)
    if (get_var_2d_double (circ_fname, "TAREA", TAREA))
       return 1;
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -201,6 +221,11 @@ put_grid_info (char *fname)
    int z_t_dimid;
    int varid;
    char *string;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((status = nc_create (fname, NC_64BIT_OFFSET, &ncid)))
       return handle_nc_error (subname, "nc_create", fname, status);
@@ -276,6 +301,11 @@ put_grid_info (char *fname)
       return 1;
    if (put_var_2d_int (fname, "KMT", KMT))
       return 1;
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 
    return 0;
 }

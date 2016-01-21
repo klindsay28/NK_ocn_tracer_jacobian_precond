@@ -69,7 +69,7 @@ grow_per_tracer_opt (int prev_tracer_cnt, int new_tracer_cnt)
    char *subname = "grow_per_tracer_opt";
    int tracer_ind;
 
-   if ((per_tracer_opt = realloc (per_tracer_opt, (size_t) new_tracer_cnt * sizeof (sink_opt_t))) == NULL) {
+   if ((per_tracer_opt = realloc (per_tracer_opt, (size_t) new_tracer_cnt * sizeof (per_tracer_opt_t))) == NULL) {
       fprintf (stderr, "realloc failed in %s for grow_per_tracer_opt\n", subname);
       return 1;
    }

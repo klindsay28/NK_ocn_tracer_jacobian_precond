@@ -132,6 +132,11 @@ comp_tracer_state_len (void)
    int i;
    int j;
 
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    /* verify that KMT is 0 on southern- and northern-most rows */
    south_flag = north_flag = 0;
    for (i = 0; i < imt; i++) {
@@ -154,6 +159,11 @@ comp_tracer_state_len (void)
    if (dbg_lvl)
       printf ("tracer_state_len = %d\n\n", tracer_state_len);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -169,6 +179,11 @@ gen_ind_maps (void)
    int j;
    int k;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (comp_tracer_state_len ()) {
       fprintf (stderr, "comp_tracer_state_len call failed in %s\n", subname);
@@ -202,6 +217,11 @@ gen_ind_maps (void)
       putchar ('\n');
       fflush (stdout);
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
    return 0;
 }
 
@@ -221,6 +241,11 @@ put_ind_maps (char *fname)
    int varid;
    char *string;
    int attval_int;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((status = nc_open (fname, NC_WRITE, &ncid)))
       return handle_nc_error (subname, "nc_open", fname, status);
@@ -302,6 +327,11 @@ put_ind_maps (char *fname)
       free (tracer_state_ind_to_ijk);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -315,6 +345,11 @@ get_ind_maps (char *fname)
    int ncid;
    int dimid;
    size_t dimlen;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (get_grid_dims (fname))
       return (1);
@@ -376,6 +411,11 @@ get_ind_maps (char *fname)
          tracer_state_ind_to_int3[tracer_state_ind].k = tracer_state_ind_to_ijk[tracer_state_ind];
 
       free (tracer_state_ind_to_ijk);
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
    }
 
    return 0;
@@ -522,6 +562,7 @@ sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
 void
 comp_nnz (void)
 {
+   char *subname = "comp_nnz";
    int tracer_ind;
    int tracer_state_ind;
    int i;
@@ -529,6 +570,11 @@ comp_nnz (void)
    int im1;
    int j;
    int k;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    nnz = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
@@ -574,6 +620,11 @@ comp_nnz (void)
 
    if (dbg_lvl)
       printf ("nnz       = %d\n\n", nnz);
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -583,6 +634,11 @@ allocate_matrix_arrays (void)
 {
    char *subname = "allocate_matrix_arrays";
    int tracer_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
       fprintf (stderr, "malloc failed in %s for nzval_row_wise\n", subname);
@@ -649,6 +705,11 @@ allocate_matrix_arrays (void)
       }
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -674,12 +735,26 @@ init_matrix (void)
    int j;
    int k;
 
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    coef_ind = 0;
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-      flat_ind_offset = (tracer_ind - 1) * tracer_state_len;
+      flat_ind_offset = tracer_ind * tracer_state_len;
+      if (dbg_lvl > 1) {
+         printf ("tracer_ind = %d, flat_ind_offset = %d\n", tracer_ind, flat_ind_offset);
+         fflush (stdout);
+      }
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
          flat_ind = flat_ind_offset + tracer_state_ind;
          rowptr[flat_ind] = coef_ind;
+
+         if (dbg_lvl > 1) {
+            printf ("rowptr[%d]=%d\n", flat_ind, coef_ind);
+            fflush (stdout);
+         }
 
          i = tracer_state_ind_to_int3[tracer_state_ind].i;
          j = tracer_state_ind_to_int3[tracer_state_ind].j;
@@ -859,6 +934,15 @@ init_matrix (void)
       return 1;
    }
    rowptr[flat_len] = coef_ind;
+   if (dbg_lvl > 1) {
+      printf ("rowptr[%d]=%d\n", flat_len, coef_ind);
+      fflush (stdout);
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 
    return 0;
 }
@@ -875,6 +959,11 @@ load_UTE (double ***UTE)
    int ip1;
    int j;
    int k;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    set_3d_double (0.0, UTE);
 
@@ -919,6 +1008,11 @@ load_UTE (double ***UTE)
    free_2d_double (DY);
    free_3d_double (WORK);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -934,6 +1028,11 @@ load_VTN (double ***VTN)
    int im1;
    int j;
    int k;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    set_3d_double (0.0, VTN);
 
@@ -977,6 +1076,11 @@ load_VTN (double ***VTN)
    free_2d_double (DX);
    free_3d_double (WORK);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -990,6 +1094,11 @@ load_WVEL (double ***WVEL)
    int i;
    int j;
    int k;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    set_3d_double (0.0, WVEL);
 
@@ -1025,6 +1134,11 @@ load_WVEL (double ***WVEL)
       for (i = 0; i < imt; i++)
          WVEL[0][j][i] = 0.0;
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1033,10 +1147,16 @@ load_WVEL (double ***WVEL)
 void
 add_UTE_coeffs (double ***UTE)
 {
+   char *subname = "add_UTE_coeffs";
    int tracer_ind;
    int tracer_state_ind;
    double east_self_interp_w;
    double west_self_interp_w;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -1096,6 +1216,11 @@ add_UTE_coeffs (double ***UTE)
             coef_ind++;
       }
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -1103,10 +1228,16 @@ add_UTE_coeffs (double ***UTE)
 void
 add_VTN_coeffs (double ***VTN)
 {
+   char *subname = "add_VTN_coeffs";
    int tracer_ind;
    int tracer_state_ind;
    double north_self_interp_w;
    double south_self_interp_w;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -1166,6 +1297,11 @@ add_VTN_coeffs (double ***VTN)
          }
       }
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -1173,10 +1309,16 @@ add_VTN_coeffs (double ***VTN)
 void
 add_WVEL_coeffs (double ***WVEL)
 {
+   char *subname = "add_WVEL_coeffs";
    int tracer_ind;
    int tracer_state_ind;
    double top_self_interp_w;
    double bot_self_interp_w;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -1237,6 +1379,11 @@ add_WVEL_coeffs (double ***WVEL)
             coef_ind++;
       }
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -1245,6 +1392,11 @@ int
 load_UTE_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 {
    char *subname = "load_UTE_upwind3";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    set_3d_double (0.0, UTE_POS);
    set_3d_double (0.0, UTE_NEG);
@@ -1257,6 +1409,11 @@ load_UTE_upwind3 (double ***UTE_POS, double ***UTE_NEG)
    if (get_var_3d_double (circ_fname, "UTE_NEG", UTE_NEG))
       return 1;
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1266,6 +1423,11 @@ int
 load_VTN_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 {
    char *subname = "load_VTN_upwind3";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    set_3d_double (0.0, VTN_POS);
    set_3d_double (0.0, VTN_NEG);
@@ -1278,6 +1440,11 @@ load_VTN_upwind3 (double ***VTN_POS, double ***VTN_NEG)
    if (get_var_3d_double (circ_fname, "VTN_NEG", VTN_NEG))
       return 1;
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1289,6 +1456,11 @@ load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    char *subname = "load_WVEL_upwind3";
    int i;
    int j;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    set_3d_double (0.0, WVEL_POS);
    set_3d_double (0.0, WVEL_NEG);
@@ -1308,6 +1480,11 @@ load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
          WVEL_NEG[0][j][i] = 0.0;
       }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1316,8 +1493,14 @@ load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 void
 add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 {
+   char *subname = "add_UTE_coeffs_upwind3";
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -1419,6 +1602,11 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
             coef_ind++;
       }
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -1426,8 +1614,14 @@ add_UTE_coeffs_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 void
 add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 {
+   char *subname = "add_VTN_coeffs_upwind3";
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -1529,6 +1723,11 @@ add_VTN_coeffs_upwind3 (double ***VTN_POS, double ***VTN_NEG)
          }
       }
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -1548,6 +1747,11 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    double *tbetzm;
    double *tdelzm;
    int k;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((dzc_tmp = malloc ((size_t) (km + 2) * sizeof (double))) == NULL) {
       fprintf (stderr, "malloc failed in %s for dzc\n", subname);
@@ -1719,6 +1923,11 @@ add_WVEL_coeffs_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
    free (tbetzm);
    free (tdelzm);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1732,6 +1941,11 @@ add_adv (void)
    double ***VEL_WIDTH;
    double ***VEL_WIDTH_POS;
    double ***VEL_WIDTH_NEG;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    switch (adv_opt) {
    case adv_none:
@@ -1782,6 +1996,11 @@ add_adv (void)
       fflush (stdout);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1799,6 +2018,11 @@ add_hmix_isop_file (void)
 
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((IRF = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for IRF\n", subname);
@@ -1931,6 +2155,11 @@ add_hmix_isop_file (void)
 
    free_3d_double (IRF);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -1949,6 +2178,11 @@ add_hmix_hor_file (void)
 
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((KAPPA = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for KAPPA\n", subname);
@@ -2088,6 +2322,11 @@ add_hmix_hor_file (void)
    free_2d_double (HUS);
    free_3d_double (KAPPA);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2105,6 +2344,11 @@ add_hmix_const (void)
    int tracer_ind;
    int tracer_state_ind;
    double ah;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    ah = 4.0e6;
 
@@ -2218,6 +2462,11 @@ add_hmix_const (void)
    free_2d_double (HTE);
    free_2d_double (HUS);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2226,6 +2475,13 @@ add_hmix_const (void)
 int
 add_hmix (void)
 {
+   char *subname = "add_hmix";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    switch (hmix_opt) {
    case hmix_none:
       break;
@@ -2252,6 +2508,11 @@ add_hmix (void)
       fflush (stdout);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2267,6 +2528,11 @@ add_vmix_matrix_file (void)
    int kprime;
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((vmix_matrix_var = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for vmix_matrix_var\n", subname);
@@ -2308,6 +2574,11 @@ add_vmix_matrix_file (void)
 
    free_3d_double (vmix_matrix_var);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2325,6 +2596,11 @@ add_vmix_file (void)
 
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((VDC_TOTAL = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for VDC_TOTAL\n", subname);
@@ -2394,6 +2670,11 @@ add_vmix_file (void)
    free_3d_double (VDC_READ);
    free_3d_double (VDC_TOTAL);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2402,9 +2683,15 @@ add_vmix_file (void)
 void
 add_vmix_const (void)
 {
+   char *subname = "add_vmix_const";
    int tracer_ind;
    int tracer_state_ind;
    double vdc;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    vdc = 0.1;
 
@@ -2451,6 +2738,11 @@ add_vmix_const (void)
          }
       }
    }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -2459,6 +2751,13 @@ add_vmix_const (void)
 int
 add_vmix (void)
 {
+   char *subname = "add_vmix";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    switch (vmix_opt) {
    case vmix_matrix_file:
       if (add_vmix_matrix_file ())
@@ -2478,6 +2777,11 @@ add_vmix (void)
       fflush (stdout);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2490,6 +2794,11 @@ add_sink_pure_diag (void)
    int tracer_ind;
    int tracer_state_ind;
    double ***SINK_RATE_FIELD;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       switch (per_tracer_opt[tracer_ind].sink_opt) {
@@ -2543,6 +2852,11 @@ add_sink_pure_diag (void)
       }
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2559,6 +2873,11 @@ add_sink_generic_tracer (void)
    double ***SINK_RATE_FIELD_SAME_LEVEL;
    double ****SINK_RATE_FIELDS_SHALLOWER;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((SINK_RATE_FIELD_SAME_LEVEL = malloc_3d_double (km, jmt, imt)) == NULL) {
       fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD_SAME_LEVEL\n", subname);
@@ -2663,6 +2982,11 @@ add_sink_generic_tracer (void)
    free (SINK_RATE_FIELDS_SHALLOWER);
    free_3d_double (SINK_RATE_FIELD_SAME_LEVEL);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2681,6 +3005,11 @@ add_sink_coupled_tracers (void)
 
    char *OCMIP_BGC_PO4_DOP_names[] = { "OCMIP_BGC_PO4", "OCMIP_BGC_PO4_DOP" };
    char **tracer_names = NULL;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    switch (coupled_tracer_opt) {
    case coupled_tracer_none:
@@ -2757,6 +3086,11 @@ add_sink_coupled_tracers (void)
       free (SINK_RATE_FIELDS);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2769,6 +3103,11 @@ add_pv (void)
    double **PV = NULL;
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       if (per_tracer_opt[tracer_ind].pv_file_name) {
@@ -2802,6 +3141,11 @@ add_pv (void)
    if (PV != NULL)
       free_2d_double (PV);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2811,9 +3155,14 @@ int
 add_d_SF_d_TRACER (void)
 {
    char *subname = "add_d_SF_d_TRACER";
-   double **d_SF_d_TRACER;
+   double **d_SF_d_TRACER = NULL;
    int tracer_ind;
    int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       if (per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name) {
@@ -2850,6 +3199,11 @@ add_d_SF_d_TRACER (void)
    if (d_SF_d_TRACER != NULL)
       free_2d_double (d_SF_d_TRACER);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -2866,6 +3220,11 @@ sum_dup_vals (void)
    int coef_ind_dup;
    int dup_cnt;
 
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    dup_cnt = 0;
    for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
       for (coef_ind = rowptr[flat_ind]; coef_ind < rowptr[flat_ind + 1]; coef_ind++)
@@ -2877,6 +3236,11 @@ sum_dup_vals (void)
             }
    if (dbg_lvl)
       printf ("subname = %s, dup_cnt = %d\n", subname, dup_cnt);
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -2890,6 +3254,11 @@ strip_matrix_zeros (void)
    int flat_ind;
    int coef_ind_all;
    int coef_ind_nonzero;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    coef_ind_all = 0;
    coef_ind_nonzero = 0;
@@ -2905,6 +3274,11 @@ strip_matrix_zeros (void)
    if (dbg_lvl)
       printf ("subname = %s, nnz_pre = %d, nnz_new = %d\n", subname, nnz, coef_ind_nonzero);
    nnz = coef_ind_nonzero;
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -2915,6 +3289,11 @@ check_matrix_diag (void)
    char *subname = "check_matrix_diag";
    int flat_ind;
    int coef_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (flat_ind = 0; flat_ind < flat_len; flat_ind++) {
       int diag_found = 0;
@@ -2932,6 +3311,11 @@ check_matrix_diag (void)
             printf (" %lld", (long long) colind[coef_ind]);
          putchar ('\n');
       }
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
    }
 }
 
@@ -2961,10 +3345,21 @@ sort_cols_one_row (int_t len, double *nzval_row_wise_loc, int_t * colind_loc)
 void
 sort_cols_all_rows (void)
 {
+   char *subname = "sort_cols_all_rows";
    int flat_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
       sort_cols_one_row (rowptr[flat_ind + 1] - rowptr[flat_ind], nzval_row_wise + rowptr[flat_ind], colind + rowptr[flat_ind]);
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
 
 /******************************************************************************/
@@ -2972,8 +3367,14 @@ sort_cols_all_rows (void)
 int
 gen_sparse_matrix (double day_cnt)
 {
+   char *subname = "gen_sparse_matrix";
    delta_t = 60.0 * 60.0 * 24.0 * day_cnt;
    year_cnt = day_cnt / 365.0;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    comp_flat_len ();
    comp_nnz ();
@@ -3016,6 +3417,11 @@ gen_sparse_matrix (double day_cnt)
 
    sort_cols_all_rows ();
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -3031,6 +3437,11 @@ put_sparse_matrix (char *fname)
    int flat_len_p1_dimid;
    int nnz_dimid;
    int varid;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((status = nc_open (fname, NC_WRITE, &ncid)))
       return handle_nc_error (subname, "nc_open", fname, status);
@@ -3105,6 +3516,11 @@ put_sparse_matrix (char *fname)
       free (tmp_int_array);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -3118,6 +3534,11 @@ get_sparse_matrix (char *fname)
    int ncid;
    int dimid;
    size_t dimlen;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
       return handle_nc_error (subname, "nc_open", fname, status);
@@ -3194,6 +3615,11 @@ get_sparse_matrix (char *fname)
       for (ind = 0; ind < flat_len + 1; ind++)
          rowptr[ind] = tmp_int_array[ind];
       free (tmp_int_array);
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
    }
 
    return 0;
