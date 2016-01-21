@@ -2832,6 +2832,9 @@ add_sink_pure_diag (void)
             fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELD\n", subname);
             return 1;
          }
+         if (dbg_lvl)
+            printf ("%s: reading %s from %s\n", subname,
+                    per_tracer_opt[tracer_ind].sink_field_name, per_tracer_opt[tracer_ind].sink_file_name);
          if (get_var_3d_double
              (per_tracer_opt[tracer_ind].sink_file_name, per_tracer_opt[tracer_ind].sink_field_name, SINK_RATE_FIELD))
             return 1;
@@ -2906,12 +2909,14 @@ add_sink_generic_tracer (void)
          }
          sprintf (field_name, "d_J_%s_d_%s", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
                   per_tracer_opt[tracer_ind].sink_generic_tracer_name);
-         if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
+         if (var_exists_in_file (per_tracer_opt[tracer_ind].sink_file_name, field_name, &sink_var_exists)) {
             fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
                      field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
             return 1;
          }
          if (sink_var_exists) {
+            if (dbg_lvl)
+               printf ("%s: reading %s from %s\n", subname, field_name, per_tracer_opt[tracer_ind].sink_file_name);
             if (get_var_3d_double (per_tracer_opt[tracer_ind].sink_file_name, field_name, SINK_RATE_FIELD_SAME_LEVEL))
                return 1;
             for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -2921,6 +2926,9 @@ add_sink_generic_tracer (void)
                int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
                nzval_row_wise[coef_ind] += -year_cnt * SINK_RATE_FIELD_SAME_LEVEL[k][j][i];
             }
+         } else {
+            if (dbg_lvl)
+               printf ("%s: %s does not exists in %s\n", subname, field_name, per_tracer_opt[tracer_ind].sink_file_name);
          }
 
          /* process levels shallower than each specific level */
@@ -2930,7 +2938,7 @@ add_sink_generic_tracer (void)
          for (k2 = 0; k2 < kmax; k2++) {
             sprintf (field_name, "d_J_%s_d_%s_k_%02d", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
                      per_tracer_opt[tracer_ind].sink_generic_tracer_name, k2);
-            if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
+            if (var_exists_in_file (per_tracer_opt[tracer_ind].sink_file_name, field_name, &sink_var_exists)) {
                fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
                         field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
                return 1;
@@ -2940,9 +2948,13 @@ add_sink_generic_tracer (void)
                   fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELDS_SHALLOWER[%d]\n", subname, k2);
                   return 1;
                }
+               if (dbg_lvl)
+                  printf ("%s: reading %s from %s\n", subname, field_name, per_tracer_opt[tracer_ind].sink_file_name);
                if (get_var_3d_double (per_tracer_opt[tracer_ind].sink_file_name, field_name, SINK_RATE_FIELDS_SHALLOWER[k2]))
                   return 1;
             } else {
+               if (dbg_lvl)
+                  printf ("%s: %s does not exists in %s\n", subname, field_name, per_tracer_opt[tracer_ind].sink_file_name);
                SINK_RATE_FIELDS_SHALLOWER[k2] = NULL;
             }
          }
@@ -3003,7 +3015,7 @@ add_sink_coupled_tracers (void)
    double ****SINK_RATE_FIELDS;
    int tracer_state_ind;
 
-   char *OCMIP_BGC_PO4_DOP_names[] = { "OCMIP_BGC_PO4", "OCMIP_BGC_PO4_DOP" };
+   char *OCMIP_BGC_PO4_DOP_names[] = { "OCMIP_BGC_PO4", "OCMIP_BGC_DOP" };
    char **tracer_names = NULL;
 
    if (dbg_lvl > 1) {
@@ -3040,7 +3052,7 @@ add_sink_coupled_tracers (void)
                return 1;
             }
             sprintf (field_name, "d_J_%s_d_%s", tracer_names[tracer_ind], tracer_names[tracer_ind_2]);
-            if (var_exists_in_file (field_name, per_tracer_opt[tracer_ind].sink_file_name, &sink_var_exists)) {
+            if (var_exists_in_file (per_tracer_opt[tracer_ind].sink_file_name, field_name, &sink_var_exists)) {
                fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
                         field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
                return 1;
@@ -3050,9 +3062,13 @@ add_sink_coupled_tracers (void)
                   fprintf (stderr, "malloc failed in %s for SINK_RATE_FIELDS[%d]\n", subname, tracer_ind);
                   return 1;
                }
+               if (dbg_lvl)
+                  printf ("%s: reading %s from %s\n", subname, field_name, per_tracer_opt[tracer_ind].sink_file_name);
                if (get_var_3d_double (per_tracer_opt[tracer_ind].sink_file_name, field_name, SINK_RATE_FIELDS[tracer_ind]))
                   return 1;
             } else {
+               if (dbg_lvl)
+                  printf ("%s: %s does not exists in %s\n", subname, field_name, per_tracer_opt[tracer_ind].sink_file_name);
                SINK_RATE_FIELDS[tracer_ind] = NULL;
             }
 
@@ -3174,7 +3190,7 @@ add_d_SF_d_TRACER (void)
             }
          }
          if (dbg_lvl)
-            printf ("%s: reading %s for piston velocity from %s\n", subname,
+            printf ("%s: reading %s from %s\n", subname,
                     per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name, per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name);
          if (get_var_2d_double
              (per_tracer_opt[tracer_ind].d_SF_d_TRACER_file_name,

@@ -189,7 +189,7 @@ read_opt_file ()
             return 1;
          }
       } else if (strcmp (optname, "coupled_tracer_cnt") == 0) {
-         if (parse_to_int (optarg, &new_coupled_tracer_cnt)) {
+         if (parse_to_int (optval, &new_coupled_tracer_cnt)) {
             fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
             return 1;
          }
@@ -203,7 +203,7 @@ read_opt_file ()
             return 1;
          }
       } else if (strcmp (optname, "tracer_ind") == 0) {
-         if (parse_to_int (optarg, &tracer_ind)) {
+         if (parse_to_int (optval, &tracer_ind)) {
             fprintf (stderr, "error parsing argument '%s' for option '%s'\n", optval, optname);
             return 1;
          }
@@ -287,7 +287,7 @@ read_opt_file ()
             }
             strcpy (per_tracer_opt[tracer_ind].sink_generic_tracer_name, optval);
             if ((optval = strtok (NULL, " \n")) != NULL) {
-               if (parse_to_int (optarg, &per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt)) {
+               if (parse_to_int (optval, &per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt)) {
                   fprintf (stderr, "error parsing sink_generic_tracer_depends_layer_cnt\n");
                   return 1;
                }
@@ -400,6 +400,7 @@ write_opts (void)
          printf ("vmix_opt                   = %s\n", "matrix_file");
          break;
       }
+      printf ("coupled_tracer_cnt         = %d\n", coupled_tracer_cnt);
       for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
          printf ("options for tracer %d\n", tracer_ind);
          switch (per_tracer_opt[tracer_ind].sink_opt) {
@@ -437,6 +438,14 @@ write_opts (void)
          printf ("   d_SF_d_TRACER_field_name= %s\n",
                  per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name ?
                  per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name : "none");
+      }
+      switch (coupled_tracer_opt) {
+      case coupled_tracer_none:
+         printf ("coupled_tracer_opt         = %s\n", "none");
+         break;
+      case coupled_tracer_OCMIP_BGC_PO4_DOP:
+         printf ("coupled_tracer_opt         = %s\n", "OCMIP_BGC_PO4_DOP");
+         break;
       }
       printf ("circ_fname                 = %s\n", circ_fname);
       printf ("matrix_fname               = %s\n\n", matrix_fname);
