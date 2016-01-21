@@ -844,7 +844,7 @@ init_matrix (void)
             }
          }
          coef_ind_sink_other_tracers[tracer_ind][tracer_state_ind] = coef_ind;
-         for (tracer_ind_2 = 0; tracer_ind_2 < tracer_state_len; tracer_ind_2++) {
+         for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
             if (tracer_ind_2 == tracer_ind)
                continue;
             nzval_row_wise[coef_ind] = 0.0;
@@ -1807,7 +1807,7 @@ add_hmix_isop_file (void)
    for (iprime = 0; iprime < 4; iprime++)
       for (jprime = 0; jprime < 3; jprime++)
          for (kprime = 0; kprime < 3; kprime++) {
-            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_%d_%d_%d", iprime + 1, jprime + 1, kprime + 1);
+            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_NK_%d_%d_%d", iprime + 1, jprime + 1, kprime + 1);
             if (dbg_lvl)
                printf ("%s: reading %s from %s\n", subname, IRF_name, circ_fname);
             if (get_var_3d_double (circ_fname, IRF_name, IRF))
