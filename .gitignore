@@ -1,4 +1,4 @@
 # ignore generated binaries
-bin/
+bin/*
 # ignore object files
 *.o
