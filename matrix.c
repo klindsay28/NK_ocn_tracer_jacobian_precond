@@ -2937,7 +2937,7 @@ add_sink_generic_tracer (void)
 
          for (k2 = 0; k2 < kmax; k2++) {
             sprintf (field_name, "d_J_%s_d_%s_k_%02d", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
-                     per_tracer_opt[tracer_ind].sink_generic_tracer_name, k2+1);
+                     per_tracer_opt[tracer_ind].sink_generic_tracer_name, k2 + 1);
             if (var_exists_in_file (per_tracer_opt[tracer_ind].sink_file_name, field_name, &sink_var_exists)) {
                fprintf (stderr, "var_exists_in_file failed in %s for field_name %s for tracer %s\n", subname,
                         field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);

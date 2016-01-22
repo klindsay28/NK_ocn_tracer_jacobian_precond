@@ -126,6 +126,7 @@ get_sparse_matrix_dist (void)
          printf ("row-oriented matrix read in\n");
    }
 
+   MPI_Bcast (&coupled_tracer_cnt, 1, MPI_INT, 0, grid.comm);
    MPI_Bcast (&flat_len, 1, MPI_INT, 0, grid.comm);
 
    /* compute flat_len_loc & fst_row */
@@ -233,13 +234,15 @@ get_sparse_matrix_dist (void)
 /******************************************************************************/
 
 int
-get_B_dist (char *var, double *B)
+get_B_dist (char **vars_per_solve, double *B)
 {
    char *subname = "get_B_dist";
 
    if (iam == 0) {
       double ***field_3d;
       double *B_global;
+      int tracer_ind;
+      int flat_ind_offset;
       int tracer_state_ind;
       int flat_ind;
       int dest;
@@ -254,17 +257,20 @@ get_B_dist (char *var, double *B)
          return 1;
       }
 
-      /* read field in as 3D variable */
-      if (get_var_3d_double (inout_fname, var, field_3d))
-         return 1;
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+         /* read single tracer in as 3D variable */
+         if (get_var_3d_double (inout_fname, vars_per_solve[tracer_ind], field_3d))
+            return 1;
 
-      /* flatten 3D variable into B_global */
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
-         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
-         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         flat_ind = tracer_state_ind;
-         B_global[flat_ind] = field_3d[k][j][i];
+         /* flatten 3D variable into B_global */
+         flat_ind_offset = tracer_ind * tracer_state_len;
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            flat_ind = flat_ind_offset + tracer_state_ind;
+            B_global[flat_ind] = field_3d[k][j][i];
+         }
       }
 
       /* copy master task B entries from B_global */
@@ -300,7 +306,7 @@ get_B_dist (char *var, double *B)
 /******************************************************************************/
 
 int
-put_B_dist (char *var, double *B)
+put_B_dist (char **vars_per_solve, double *B)
 {
    char *subname = "put_B_dist";
 
@@ -308,6 +314,8 @@ put_B_dist (char *var, double *B)
       MPI_Status status;
       double ***field_3d;
       double *B_global;
+      int tracer_ind;
+      int flat_ind_offset;
       int tracer_state_ind;
       int flat_ind;
       int source;
@@ -338,22 +346,25 @@ put_B_dist (char *var, double *B)
          MPI_Recv (&B_global[fst_row_source], count, MPI_DOUBLE, source, 4, grid.comm, &status);
       }
 
-      /* read field in as 3D variable so that non-processed field values are preserved */
-      if (get_var_3d_double (inout_fname, var, field_3d))
-         return 1;
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+         /* read field in as 3D variable so that non-processed field values are preserved */
+         if (get_var_3d_double (inout_fname, vars_per_solve[tracer_ind], field_3d))
+            return 1;
 
-      /* convert flat B_global into 3D variable */
-      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
-         int i = tracer_state_ind_to_int3[tracer_state_ind].i;
-         int j = tracer_state_ind_to_int3[tracer_state_ind].j;
-         int k = tracer_state_ind_to_int3[tracer_state_ind].k;
-         flat_ind = tracer_state_ind;
-         field_3d[k][j][i] = B_global[flat_ind];
+         /* convert flat B_global into 3D variable */
+         flat_ind_offset = tracer_ind * tracer_state_len;
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            flat_ind = flat_ind_offset + tracer_state_ind;
+            field_3d[k][j][i] = B_global[flat_ind];
+         }
+
+         /* write out 3D variable */
+         if (put_var_3d_double (inout_fname, vars_per_solve[tracer_ind], field_3d))
+            return 1;
       }
-
-      /* write out 3D variable */
-      if (put_var_3d_double (inout_fname, var, field_3d))
-         return 1;
 
       /* free allocated memory */
       free (B_global);
@@ -387,6 +398,7 @@ main (int argc, char *argv[])
    double *B;
    double *berr;
 
+   char **vars_per_solve = NULL;
    char *varsep = ",";
    char *var = NULL;
 
@@ -418,6 +430,11 @@ main (int argc, char *argv[])
 
    if (get_sparse_matrix_dist ())
       exit (EXIT_FAILURE);
+
+   if ((vars_per_solve = malloc ((size_t) coupled_tracer_cnt * sizeof (char *))) == NULL) {
+      fprintf (stderr, "malloc failed in %s for vars_per_solve\n", argv[0]);
+      exit (EXIT_FAILURE);
+   }
 
    /* create distributed compressed row matrix for A */
    dCreate_CompRowLoc_Matrix_dist (&A, flat_len, flat_len, nnz_loc, flat_len_loc, fst_row,
@@ -483,10 +500,26 @@ main (int argc, char *argv[])
          exit (EXIT_FAILURE);
    }
    for (var = strtok (vars, varsep); var; var = strtok (NULL, varsep)) {
-      if (dbg_lvl && (iam == 0))
-         printf ("processing variable %s\n", var);
+      int tracer_ind;
 
-      if (get_B_dist (var, B))
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+         if (tracer_ind > 0) {
+            var = strtok (NULL, varsep);
+            if (var) {
+               fprintf (stderr, "error extracting tracer_ind=%d, ran out of var names\n", tracer_ind);
+               exit (EXIT_FAILURE);
+            }
+         }
+         if (dbg_lvl && (iam == 0))
+            printf ("processing variable %s\n", var);
+         if ((vars_per_solve[tracer_ind] = malloc (1 + strlen (var))) == NULL) {
+            fprintf (stderr, "malloc failed in %s for vars_per_solve[%d]\n", argv[0], tracer_ind);
+            exit (EXIT_FAILURE);
+         }
+         strcpy (vars_per_solve[tracer_ind], var);
+      }
+
+      if (get_B_dist (vars_per_solve, B))
          exit (EXIT_FAILURE);
 
       PStatInit (&stat);
@@ -503,8 +536,11 @@ main (int argc, char *argv[])
       fflush (stdout);
       MPI_Barrier (grid.comm);
 
-      if (put_B_dist (var, B))
+      if (put_B_dist (vars_per_solve, B))
          exit (EXIT_FAILURE);
+
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++)
+         free (vars_per_solve[tracer_ind]);
    }
 
    /* deallocate storage */
@@ -516,6 +552,7 @@ main (int argc, char *argv[])
       dSolveFinalize (&options, &SOLVEstruct);
    if (iam == 0)
       free_ind_maps ();
+   free (vars_per_solve);
    free (vars);
    SUPERLU_FREE (B);
    SUPERLU_FREE (berr);
