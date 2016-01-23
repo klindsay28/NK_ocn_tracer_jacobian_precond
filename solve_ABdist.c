@@ -114,10 +114,16 @@ parse_cmd_line (int argc, char **argv)
 int
 get_sparse_matrix_dist (void)
 {
+   char *subname = "get_sparse_matrix_dist";
    MPI_Status status;
    int flat_ind;
    int nnz_ind;
    int dest;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (iam == 0) {
       if (get_sparse_matrix (matrix_fname))
@@ -228,6 +234,11 @@ get_sparse_matrix_dist (void)
    fflush (stdout);
    MPI_Barrier (grid.comm);
 
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -237,6 +248,11 @@ int
 get_B_dist (char **vars_per_solve, double *B)
 {
    char *subname = "get_B_dist";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (iam == 0) {
       double ***field_3d;
@@ -300,6 +316,11 @@ get_B_dist (char **vars_per_solve, double *B)
    fflush (stdout);
    MPI_Barrier (grid.comm);
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -309,6 +330,11 @@ int
 put_B_dist (char **vars_per_solve, double *B)
 {
    char *subname = "put_B_dist";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (iam == 0) {
       MPI_Status status;
@@ -375,6 +401,11 @@ put_B_dist (char **vars_per_solve, double *B)
 
    fflush (stdout);
    MPI_Barrier (grid.comm);
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 
    return 0;
 }

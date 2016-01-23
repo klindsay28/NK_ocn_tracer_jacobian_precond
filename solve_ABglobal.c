@@ -110,6 +110,13 @@ parse_cmd_line (int argc, char **argv)
 int
 get_sparse_matrix_global (void)
 {
+   char *subname = "get_sparse_matrix_global";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
+
    if (iam == 0) {
       if (get_sparse_matrix (matrix_fname))
          return 1;
@@ -132,6 +139,11 @@ get_sparse_matrix_global (void)
    if (dbg_lvl && (iam == 0))
       printf ("column-oriented matrix entries broadcast\n");
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -141,6 +153,11 @@ int
 get_B_global (char **vars_per_solve, double *B)
 {
    char *subname = "get_B_global";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (iam == 0) {
       double ***field_3d;
@@ -179,6 +196,11 @@ get_B_global (char **vars_per_solve, double *B)
       MPI_Bcast (B, flat_len, MPI_DOUBLE, 0, grid.comm);
    }
 
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
+
    return 0;
 }
 
@@ -188,6 +210,11 @@ int
 put_B_global (char **vars_per_solve, double *B)
 {
    char *subname = "put_B_global";
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    if (iam == 0) {
       double ***field_3d;
@@ -224,6 +251,11 @@ put_B_global (char **vars_per_solve, double *B)
 
       /* free allocated memory */
       free_3d_double (field_3d);
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
    }
 
    return 0;

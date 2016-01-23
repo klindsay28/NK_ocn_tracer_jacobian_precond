@@ -3576,31 +3576,22 @@ get_sparse_matrix (char *fname)
    if ((status = nc_close (ncid)))
       return handle_nc_error (subname, "nc_close", fname, status);
 
+   if (get_var_1d_int (fname, "coupled_tracer_cnt", &coupled_tracer_cnt))
+      return 1;
+
    if (dbg_lvl && (iam == 0)) {
+      printf ("%s: coupled_tracer_cnt = %d\n", subname, coupled_tracer_cnt);
       printf ("%s: nnz = %d\n", subname, nnz);
       printf ("%s: flat_len = %d\n", subname, flat_len);
    }
 
    /* allocate arrays for sparse matrix */
 
-   if ((nzval_row_wise = malloc ((size_t) nnz * sizeof (double))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for nzval_row_wise\n", subname);
+   if (allocate_matrix_arrays ())
       return 1;
-   }
-   if ((colind = malloc ((size_t) nnz * sizeof (int_t))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for colind\n", subname);
-      return 1;
-   }
-   if ((rowptr = malloc ((size_t) (flat_len + 1) * sizeof (int_t))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for rowptr\n", subname);
-      return 1;
-   }
 
    /* read variables */
    /* read int_t variables to an int array and copy to int_t arrays */
-
-   if (get_var_1d_int (fname, "coupled_tracer_cnt", &coupled_tracer_cnt))
-      return 1;
 
    if (get_var_1d_double (fname, "nzval_row_wise", nzval_row_wise))
       return 1;
@@ -3646,7 +3637,13 @@ get_sparse_matrix (char *fname)
 void
 free_sparse_matrix (void)
 {
+   char *subname = "free_sparse_matrix";
    int tracer_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("entering %s\n", subname);
+      fflush (stdout);
+   }
 
    free (rowptr);
    free (colind);
@@ -3667,4 +3664,9 @@ free_sparse_matrix (void)
    free (coef_ind_vmix_non_nbr);
    free (coef_ind_sink_non_nbr);
    free (coef_ind_sink_other_tracers);
+
+   if (dbg_lvl > 1) {
+      printf ("exiting %s\n", subname);
+      fflush (stdout);
+   }
 }
