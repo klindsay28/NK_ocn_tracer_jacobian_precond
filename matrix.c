@@ -550,8 +550,8 @@ sink_non_nbr_cnt (int tracer_ind, int k, int j, int i)
    if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
       int kmax =
          (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
-          -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
-      cnt = (k <= kmax) ? k : kmax;
+          -1) ? km - 1 : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt - 1;
+      cnt = (k <= kmax) ? k + 1 : kmax + 1;
    }
 
    return cnt;
@@ -910,9 +910,9 @@ init_matrix (void)
             int k2;
             int kmax =
                (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
-                -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
+                -1) ? km - 1 : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt - 1;
 
-            for (k2 = (k <= kmax) ? k - 1 : kmax - 1; k2 >= 0; k2--) {
+            for (k2 = (k <= kmax) ? k : kmax; k2 >= 0; k2--) {
                nzval_row_wise[coef_ind] = 0.0;
                colind[coef_ind] = flat_ind_offset + int3_to_tracer_state_ind[k2][j][i];
                coef_ind++;
@@ -2898,7 +2898,7 @@ add_sink_generic_tracer (void)
       if (per_tracer_opt[tracer_ind].sink_opt == sink_generic_tracer) {
          int kmax =
             (per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt ==
-             -1) ? km : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt;
+             -1) ? km - 1 : per_tracer_opt[tracer_ind].sink_generic_tracer_depends_layer_cnt - 1;
 
          /* read and add pure diagonal term, if present in input file */
 
@@ -2935,7 +2935,7 @@ add_sink_generic_tracer (void)
 
          /* allocate space for and read in corresponding file variables, if present in input file */
 
-         for (k2 = 0; k2 < kmax; k2++) {
+         for (k2 = 0; k2 <= kmax; k2++) {
             sprintf (field_name, "d_J_%s_d_%s_k_%02d", per_tracer_opt[tracer_ind].sink_generic_tracer_name,
                      per_tracer_opt[tracer_ind].sink_generic_tracer_name, k2 + 1);
             if (var_exists_in_file (per_tracer_opt[tracer_ind].sink_file_name, field_name, &sink_var_exists)) {
@@ -2964,7 +2964,7 @@ add_sink_generic_tracer (void)
             int j = tracer_state_ind_to_int3[tracer_state_ind].j;
             int k = tracer_state_ind_to_int3[tracer_state_ind].k;
             int coef_ind = coef_ind_sink_non_nbr[tracer_ind][tracer_state_ind];
-            for (k2 = (k <= kmax) ? k - 1 : kmax - 1; k2 >= 0; k2--) {
+            for (k2 = (k <= kmax) ? k : kmax; k2 >= 0; k2--) {
                if (SINK_RATE_FIELDS_SHALLOWER[k2] != NULL) {
                   nzval_row_wise[coef_ind] += SINK_RATE_FIELDS_SHALLOWER[k2][k][j][i];
                }
