@@ -362,7 +362,7 @@ main (int argc, char *argv[])
       for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
          if (tracer_ind > 0) {
             var = strtok (NULL, varsep);
-            if (var) {
+            if (var == NULL) {
                fprintf (stderr, "error extracting tracer_ind=%d, ran out of var names\n", tracer_ind);
                exit (EXIT_FAILURE);
             }

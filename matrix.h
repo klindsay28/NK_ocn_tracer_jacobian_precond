@@ -40,14 +40,11 @@ typedef struct
    sink_opt_t sink_opt;
    double sink_rate;            /* loss rate, units = 1/yr */
    double sink_depth;           /* depth threshold for sink_const_shallow, units = cm (same as model's z_t) */
-   char *sink_file_name;
    char *sink_field_name;
    char *sink_generic_tracer_name;
    int sink_generic_tracer_depends_layer_cnt;
 
-   char *pv_file_name;
    char *pv_field_name;
-   char *d_SF_d_TRACER_file_name;
    char *d_SF_d_TRACER_field_name;
 } per_tracer_opt_t;
 
@@ -75,6 +72,8 @@ extern adv_opt_t adv_opt;
 extern hmix_opt_t hmix_opt;
 
 extern vmix_opt_t vmix_opt;
+
+extern char *tracer_fname;
 
 extern per_tracer_opt_t *per_tracer_opt;
 
