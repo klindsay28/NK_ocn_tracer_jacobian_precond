@@ -200,13 +200,13 @@ gen_ind_maps (void)
       return 1;
    }
    tracer_state_ind = 0;
-   if (dbg_lvl > 1)
+   if (dbg_lvl > 2)
       printf ("mappings between flat and 3d indices\n");
    for (j = 0; j < jmt; j++)
       for (i = 0; i < imt; i++)
          for (k = 0; k < km; k++)
             if (k < KMT[j][i]) {
-               if (dbg_lvl > 1)
+               if (dbg_lvl > 2)
                   printf ("i = %3d, j = %3d, k = %2d, tracer_state_ind = %d\n", i, j, k, tracer_state_ind);
                int3_to_tracer_state_ind[k][j][i] = tracer_state_ind;
                tracer_state_ind_to_int3[tracer_state_ind].i = i;
@@ -215,15 +215,12 @@ gen_ind_maps (void)
                tracer_state_ind++;
             } else
                int3_to_tracer_state_ind[k][j][i] = -1;
-   if (dbg_lvl > 1) {
-      putchar ('\n');
-      fflush (stdout);
-   }
 
    if (dbg_lvl > 1) {
       printf ("exiting %s\n", subname);
       fflush (stdout);
    }
+
    return 0;
 }
 
@@ -753,7 +750,7 @@ init_matrix (void)
          flat_ind = flat_ind_offset + tracer_state_ind;
          rowptr[flat_ind] = coef_ind;
 
-         if (dbg_lvl > 1) {
+         if (dbg_lvl > 2) {
             printf ("rowptr[%d]=%d\n", flat_ind, coef_ind);
             fflush (stdout);
          }
@@ -936,7 +933,7 @@ init_matrix (void)
       return 1;
    }
    rowptr[flat_len] = coef_ind;
-   if (dbg_lvl > 1) {
+   if (dbg_lvl > 2) {
       printf ("rowptr[%d]=%d\n", flat_len, coef_ind);
       fflush (stdout);
    }
@@ -3025,6 +3022,10 @@ add_sink_coupled_tracers (void)
 
    switch (coupled_tracer_opt) {
    case coupled_tracer_none:
+      if (dbg_lvl > 1) {
+         printf ("exiting %s\n", subname);
+         fflush (stdout);
+      }
       return 0;
    case coupled_tracer_OCMIP_BGC_PO4_DOP:
       tracer_names = OCMIP_BGC_PO4_DOP_names;
@@ -3132,7 +3133,7 @@ add_pv (void)
                      per_tracer_opt[tracer_ind].pv_field_name);
             return 1;
          }
-         if (pv != NULL) {
+         if (pv == NULL) {
             if ((pv = malloc_2d_double (jmt, imt)) == NULL) {
                fprintf (stderr, "malloc failed in %s for pv\n", subname);
                return 1;
@@ -3192,7 +3193,7 @@ add_d_SF_d_TRACER (void)
                      per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name);
             return 1;
          }
-         if (d_SF_d_TRACER != NULL) {
+         if (d_SF_d_TRACER == NULL) {
             if ((d_SF_d_TRACER = malloc_2d_double (jmt, imt)) == NULL) {
                fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER\n", subname);
                return 1;

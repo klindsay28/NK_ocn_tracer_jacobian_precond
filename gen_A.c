@@ -284,20 +284,12 @@ read_opt_file ()
             }
          }
       } else if (strcmp (optname, "pv") == 0) {
-         if ((optval = strtok (NULL, " \n")) == NULL) {
-            fprintf (stderr, "unspecified pv_field_name\n");
-            return 1;
-         }
          if ((per_tracer_opt[tracer_ind].pv_field_name = malloc (1 + strlen (optval))) == NULL) {
             fprintf (stderr, "malloc failed in %s for pv_field_name\n", subname);
             return 1;
          }
          strcpy (per_tracer_opt[tracer_ind].pv_field_name, optval);
       } else if (strcmp (optname, "sf") == 0) {
-         if ((optval = strtok (NULL, " \n")) == NULL) {
-            fprintf (stderr, "unspecified d_SF_d_TRACER_field_name\n");
-            return 1;
-         }
          if ((per_tracer_opt[tracer_ind].d_SF_d_TRACER_field_name = malloc (1 + strlen (optval))) == NULL) {
             fprintf (stderr, "malloc failed in %s for d_SF_d_TRACER_field_name\n", subname);
             return 1;
