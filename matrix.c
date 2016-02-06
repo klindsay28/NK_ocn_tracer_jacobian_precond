@@ -2663,6 +2663,11 @@ add_vmix_file (void)
             nzval_row_wise[coef_ind] += ct;
             coef_ind++;
          }
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
+            nzval_row_wise[coef_ind] += cb;
+            coef_ind++;
+         }
       }
    }
 
@@ -2921,7 +2926,7 @@ add_sink_generic_tracer (void)
                int j = tracer_state_ind_to_int3[tracer_state_ind].j;
                int k = tracer_state_ind_to_int3[tracer_state_ind].k;
                int coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
-               nzval_row_wise[coef_ind] += -year_cnt * SINK_RATE_FIELD_SAME_LEVEL[k][j][i];
+               nzval_row_wise[coef_ind] += delta_t * SINK_RATE_FIELD_SAME_LEVEL[k][j][i];
             }
          } else {
             if (dbg_lvl)
@@ -2963,7 +2968,7 @@ add_sink_generic_tracer (void)
             int coef_ind = coef_ind_sink_non_nbr[tracer_ind][tracer_state_ind];
             for (k2 = (k <= kmax) ? k : kmax; k2 >= 0; k2--) {
                if (SINK_RATE_FIELDS_SHALLOWER[k2] != NULL) {
-                  nzval_row_wise[coef_ind] += SINK_RATE_FIELDS_SHALLOWER[k2][k][j][i];
+                  nzval_row_wise[coef_ind] += delta_t * SINK_RATE_FIELDS_SHALLOWER[k2][k][j][i];
                }
                coef_ind++;
             }
@@ -3085,7 +3090,7 @@ add_sink_coupled_tracers (void)
                if (tracer_ind_2 == tracer_ind)
                   continue;
                if (SINK_RATE_FIELDS[tracer_ind_2] != NULL) {
-                  nzval_row_wise[coef_ind] += SINK_RATE_FIELDS[tracer_ind_2][k][j][i];
+                  nzval_row_wise[coef_ind] += delta_t * SINK_RATE_FIELDS[tracer_ind_2][k][j][i];
                }
                coef_ind++;
             }
