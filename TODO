@@ -1,0 +1,24 @@
+
+separate RHS and soln vectors in solve_AB
+
+option 1:
+   add IO format option (nc or binary) to gen_A and solve_AB
+
+option 2:
+   create matrix nc <--> binary conversion tool
+   create vector nc <--> binary conversion tool
+
+option 3:
+   change A. Bardin toolchain to be nc
+
+add IRF stencil widths as option to gen_A
+
+add IRF as advection option
+
+change input of sink_type sub-options to one per line
+
+add opt_consistency_check function to verify required options are set
+
+make messages uniform (filename and function name)
+   maybe use __FILE__, __LINE__
+

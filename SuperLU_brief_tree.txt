@@ -1,0 +1,24 @@
+
+Global Input
+
+pdgssvx_ABglobal
+	# Symbolic factorization
+	symbfact
+
+	# Distribute L and U factors
+	ddistribute
+
+	# Factor matrix
+	pdgstrf
+		pdgstrf2
+		pdgstrs2
+
+	# Solve the linear system.
+	pdgstrs_Bglobal
+
+	# Iterative refinement
+	pdgsrfs_ABXglobal
+		pdgsmv_AXglobal_setup
+		pdgsmv_AXglobal
+		pdgsmv_AXglobal_abs
+		pdgstrs1
