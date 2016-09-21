@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -290,7 +291,7 @@ get_B_dist (char **vars_per_solve, double *B)
       }
 
       /* copy master task B entries from B_global */
-      for (flat_ind = 0; flat_ind <= flat_len_loc; flat_ind++)
+      for (flat_ind = 0; flat_ind < flat_len_loc; flat_ind++)
          B[flat_ind] = B_global[flat_ind];
 
       /* send B_global entry segments to non-master tasks */
@@ -305,16 +306,18 @@ get_B_dist (char **vars_per_solve, double *B)
          MPI_Send (&B_global[fst_row_dest], count, MPI_DOUBLE, dest, 3, grid.comm);
       }
 
+      fflush (stdout);
+
+      MPI_Barrier (grid.comm);
+
       /* free allocated memory */
       free (B_global);
       free_3d_double (field_3d);
    } else {
       MPI_Status status;
       MPI_Recv (B, flat_len_loc, MPI_DOUBLE, 0, 3, grid.comm, &status);
+      MPI_Barrier (grid.comm);
    }
-
-   fflush (stdout);
-   MPI_Barrier (grid.comm);
 
    if (dbg_lvl > 1) {
       printf ("exiting %s\n", subname);
@@ -357,7 +360,7 @@ put_B_dist (char **vars_per_solve, double *B)
       }
 
       /* copy master task B entries from B_global */
-      for (flat_ind = 0; flat_ind <= flat_len_loc; flat_ind++)
+      for (flat_ind = 0; flat_ind < flat_len_loc; flat_ind++)
          B_global[flat_ind] = B[flat_ind];
 
       /* receive B_global entry segments from non-master tasks */
@@ -480,13 +483,15 @@ main (int argc, char *argv[])
 #if 0
    options.ColPerm = PARMETIS;
 #endif
+   options.ParSymbFact = YES;
+   options.ColPerm = PARMETIS;
 
    if (dbg_lvl && (iam == 0))
       print_options_dist (&options);
 
    /* initialize ScalePermstruct, LUstruct */
    ScalePermstructInit (flat_len, flat_len, &ScalePermstruct);
-   LUstructInit (flat_len, flat_len, &LUstruct);
+   LUstructInit (flat_len, &LUstruct);
 
    /* allocate space for RHS and solution */
    nrhs = 1;
@@ -585,8 +590,8 @@ main (int argc, char *argv[])
       free_ind_maps ();
    free (vars_per_solve);
    free (vars);
-   SUPERLU_FREE (B);
    SUPERLU_FREE (berr);
+   SUPERLU_FREE (B);
 
    /* release SuperLU process grid */
    superlu_gridexit (&grid);

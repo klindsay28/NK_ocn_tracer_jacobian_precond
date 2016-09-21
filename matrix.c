@@ -2030,7 +2030,7 @@ add_hmix_isop_file (void)
    for (iprime = 0; iprime < 4; iprime++)
       for (jprime = 0; jprime < 3; jprime++)
          for (kprime = 0; kprime < 3; kprime++) {
-            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_NK_%d_%d_%d", iprime + 1, jprime + 1, kprime + 1);
+            sprintf (IRF_name, "HDIF_EXPLICIT_3D_IRF_%d_%d_%d", iprime + 1, jprime + 1, kprime + 1);
             if (dbg_lvl)
                printf ("%s: reading %s from %s\n", subname, IRF_name, circ_fname);
             if (get_var_3d_double (circ_fname, IRF_name, IRF))

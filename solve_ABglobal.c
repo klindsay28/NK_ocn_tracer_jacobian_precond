@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -321,12 +322,14 @@ main (int argc, char *argv[])
 
    /* use default SuperLU options */
    set_default_options_dist (&options);
+   options.ParSymbFact = YES;
+   options.ColPerm = PARMETIS;
    if (dbg_lvl && (iam == 0))
       print_options_dist (&options);
 
    /* initialize ScalePermstruct, LUstruct */
    ScalePermstructInit (flat_len, flat_len, &ScalePermstruct);
-   LUstructInit (flat_len, flat_len, &LUstruct);
+   LUstructInit (flat_len, &LUstruct);
 
    /* allocate space for RHS and solution */
    nrhs = 1;

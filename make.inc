@@ -1,1 +1,1 @@
-/glade/u/home/klindsay/libs/SuperLU_DIST/make.inc
+/glade/u/home/klindsay/libs/SuperLU_DIST_4.3/make.inc
