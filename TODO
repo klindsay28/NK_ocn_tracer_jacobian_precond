@@ -17,6 +17,9 @@ add IRF as advection option
 
 change input of sink_type sub-options to one per line
 
+sink_type=file options are hard-coded for rates to be 1/yr
+   check units attribute of sink_field_name
+
 add opt_consistency_check function to verify required options are set
 
 make messages uniform (filename and function name)
