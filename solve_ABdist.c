@@ -443,124 +443,75 @@ main (int argc, char *argv[])
    dbg_lvl = 0;
    nprow = npcol = 4;
 
+   MPI_Comm_rank (MPI_COMM_WORLD, &iam);
+
    if (parse_cmd_line (argc, argv))
       exit (EXIT_FAILURE);
 
    nprocs = nprow * npcol;
 
-   /* initialize SuperLU process grid */
-   superlu_gridinit (MPI_COMM_WORLD, nprow, npcol, &grid);
-   iam = grid.iam;
+   /* only run remainder of program for nprocs tasks */
+   if (iam < nprocs) {
 
-   if (dbg_lvl && (iam == 0)) {
-      printf ("dbg_lvl            = %d\n", dbg_lvl);
-      printf ("nprocs             = %lld\n", (long long) nprocs);
-      printf ("nprow              = %lld\n", (long long) nprow);
-      printf ("npcol              = %lld\n", (long long) npcol);
-      printf ("vars               = %s\n", vars);
-      printf ("matrix_fname       = %s\n", matrix_fname);
-      printf ("inout_fname        = %s\n\n", inout_fname);
-   }
+      /* initialize SuperLU process grid */
+      superlu_gridinit (MPI_COMM_WORLD, nprow, npcol, &grid);
 
-   if (get_sparse_matrix_dist ())
-      exit (EXIT_FAILURE);
-
-   if ((vars_per_solve = malloc ((size_t) coupled_tracer_cnt * sizeof (char *))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for vars_per_solve\n", argv[0]);
-      exit (EXIT_FAILURE);
-   }
-
-   /* create distributed compressed row matrix for A */
-   dCreate_CompRowLoc_Matrix_dist (&A, flat_len, flat_len, nnz_loc, flat_len_loc, fst_row,
-                                   nzval_loc, colind_loc, rowptr_loc, SLU_NR_loc, SLU_D, SLU_GE);
-   if (dbg_lvl && (iam == 0))
-      printf ("distributed row-oriented matrix created\n");
-
-   /* use default SuperLU options */
-   set_default_options_dist (&options);
-
-   /* set any non-standard SuperLU options */
-#if 0
-   options.ColPerm = PARMETIS;
-#endif
-   options.ParSymbFact = YES;
-   options.ColPerm = PARMETIS;
-
-   if (dbg_lvl && (iam == 0))
-      print_options_dist (&options);
-
-   /* initialize ScalePermstruct, LUstruct */
-   ScalePermstructInit (flat_len, flat_len, &ScalePermstruct);
-   LUstructInit (flat_len, &LUstruct);
-
-   /* allocate space for RHS and solution */
-   nrhs = 1;
-   if ((B = doubleMalloc_dist (flat_len_loc * nrhs)) == NULL)
-      ABORT ("Malloc fails for B[].");
-   if ((berr = doubleMalloc_dist (nrhs)) == NULL)
-      ABORT ("Malloc fails for berr[].");
-
-   fflush (stdout);
-   MPI_Barrier (grid.comm);
-
-   /* factor matrix with no RHS */
-   nrhs_tmp = 0;
-   PStatInit (&stat);
-   printf ("calling pdgssvx\n");
-   pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs_tmp, &grid, &LUstruct, &SOLVEstruct, berr, &stat, &info);
-   if (dbg_lvl) {
-      if (iam == 0)
-         printf ("dgssvx info = %d\n", info);
-      if (options.PrintStat)
-         PStatPrint (&options, &stat, &grid);
-   }
-   PStatFree (&stat);
-
-#if 0
-   if (iam == 0) {
-      int flat_ind;
-      for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
-         printf (" perm_c[%d] = %lld\n", flat_ind, (long long) (ScalePermstruct.perm_c[flat_ind]));
-   }
-#endif
-
-   fflush (stdout);
-   MPI_Barrier (grid.comm);
-
-   /* solve, each tracer is a different RHS */
-   options.Fact = FACTORED;
-   if (iam == 0) {
-      if (get_ind_maps (matrix_fname))
-         exit (EXIT_FAILURE);
-      if (get_grid_dims (matrix_fname))
-         exit (EXIT_FAILURE);
-   }
-   for (var = strtok (vars, varsep); var; var = strtok (NULL, varsep)) {
-      int tracer_ind;
-
-      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
-         if (tracer_ind > 0) {
-            var = strtok (NULL, varsep);
-            if (var == NULL) {
-               fprintf (stderr, "error extracting tracer_ind=%d, ran out of var names\n", tracer_ind);
-               exit (EXIT_FAILURE);
-            }
-         }
-         if (dbg_lvl && (iam == 0))
-            printf ("processing variable %s\n", var);
-         if ((vars_per_solve[tracer_ind] = malloc (1 + strlen (var))) == NULL) {
-            fprintf (stderr, "malloc failed in %s for vars_per_solve[%d]\n", argv[0], tracer_ind);
-            exit (EXIT_FAILURE);
-         }
-         strcpy (vars_per_solve[tracer_ind], var);
+      if (dbg_lvl && (iam == 0)) {
+         printf ("dbg_lvl            = %d\n", dbg_lvl);
+         printf ("nprocs             = %lld\n", (long long) nprocs);
+         printf ("nprow              = %lld\n", (long long) nprow);
+         printf ("npcol              = %lld\n", (long long) npcol);
+         printf ("vars               = %s\n", vars);
+         printf ("matrix_fname       = %s\n", matrix_fname);
+         printf ("inout_fname        = %s\n\n", inout_fname);
       }
 
-      if (get_B_dist (vars_per_solve, B))
+      if (get_sparse_matrix_dist ())
          exit (EXIT_FAILURE);
 
+      if ((vars_per_solve = malloc ((size_t) coupled_tracer_cnt * sizeof (char *))) == NULL) {
+         fprintf (stderr, "malloc failed in %s for vars_per_solve\n", argv[0]);
+         exit (EXIT_FAILURE);
+      }
+
+      /* create distributed compressed row matrix for A */
+      dCreate_CompRowLoc_Matrix_dist (&A, flat_len, flat_len, nnz_loc, flat_len_loc, fst_row,
+                                      nzval_loc, colind_loc, rowptr_loc, SLU_NR_loc, SLU_D, SLU_GE);
+      if (dbg_lvl && (iam == 0))
+         printf ("distributed row-oriented matrix created\n");
+
+      /* use default SuperLU options */
+      set_default_options_dist (&options);
+
+      /* set any non-standard SuperLU options */
+#if 0
+      options.ColPerm = PARMETIS;
+#endif
+      options.ParSymbFact = YES;
+      options.ColPerm = PARMETIS;
+
+      if (dbg_lvl && (iam == 0))
+         print_options_dist (&options);
+
+      /* initialize ScalePermstruct, LUstruct */
+      ScalePermstructInit (flat_len, flat_len, &ScalePermstruct);
+      LUstructInit (flat_len, &LUstruct);
+
+      /* allocate space for RHS and solution */
+      nrhs = 1;
+      if ((B = doubleMalloc_dist (flat_len_loc * nrhs)) == NULL)
+         ABORT ("Malloc fails for B[].");
+      if ((berr = doubleMalloc_dist (nrhs)) == NULL)
+         ABORT ("Malloc fails for berr[].");
+
+      fflush (stdout);
+      MPI_Barrier (grid.comm);
+
+      /* factor matrix with no RHS */
+      nrhs_tmp = 0;
       PStatInit (&stat);
       printf ("calling pdgssvx\n");
-      pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs, &grid, &LUstruct, &SOLVEstruct, berr, &stat, &info);
+      pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs_tmp, &grid, &LUstruct, &SOLVEstruct, berr, &stat, &info);
       if (dbg_lvl) {
          if (iam == 0)
             printf ("dgssvx info = %d\n", info);
@@ -569,32 +520,87 @@ main (int argc, char *argv[])
       }
       PStatFree (&stat);
 
+#if 0
+      if (iam == 0) {
+         int flat_ind;
+         for (flat_ind = 0; flat_ind < flat_len; flat_ind++)
+            printf (" perm_c[%d] = %lld\n", flat_ind, (long long) (ScalePermstruct.perm_c[flat_ind]));
+      }
+#endif
+
       fflush (stdout);
       MPI_Barrier (grid.comm);
 
-      if (put_B_dist (vars_per_solve, B))
-         exit (EXIT_FAILURE);
+      /* solve, each tracer is a different RHS */
+      options.Fact = FACTORED;
+      if (iam == 0) {
+         if (get_ind_maps (matrix_fname))
+            exit (EXIT_FAILURE);
+         if (get_grid_dims (matrix_fname))
+            exit (EXIT_FAILURE);
+      }
+      for (var = strtok (vars, varsep); var; var = strtok (NULL, varsep)) {
+         int tracer_ind;
 
-      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++)
-         free (vars_per_solve[tracer_ind]);
+         for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+            if (tracer_ind > 0) {
+               var = strtok (NULL, varsep);
+               if (var == NULL) {
+                  fprintf (stderr, "error extracting tracer_ind=%d, ran out of var names\n", tracer_ind);
+                  exit (EXIT_FAILURE);
+               }
+            }
+            if (dbg_lvl && (iam == 0))
+               printf ("processing variable %s\n", var);
+            if ((vars_per_solve[tracer_ind] = malloc (1 + strlen (var))) == NULL) {
+               fprintf (stderr, "malloc failed in %s for vars_per_solve[%d]\n", argv[0], tracer_ind);
+               exit (EXIT_FAILURE);
+            }
+            strcpy (vars_per_solve[tracer_ind], var);
+         }
+
+         if (get_B_dist (vars_per_solve, B))
+            exit (EXIT_FAILURE);
+
+         PStatInit (&stat);
+         printf ("calling pdgssvx\n");
+         pdgssvx (&options, &A, &ScalePermstruct, B, flat_len_loc, nrhs, &grid, &LUstruct, &SOLVEstruct, berr, &stat, &info);
+         if (dbg_lvl) {
+            if (iam == 0)
+               printf ("dgssvx info = %d\n", info);
+            if (options.PrintStat)
+               PStatPrint (&options, &stat, &grid);
+         }
+         PStatFree (&stat);
+
+         fflush (stdout);
+         MPI_Barrier (grid.comm);
+
+         if (put_B_dist (vars_per_solve, B))
+            exit (EXIT_FAILURE);
+
+         for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++)
+            free (vars_per_solve[tracer_ind]);
+      }
+
+      /* deallocate storage */
+      Destroy_CompRowLoc_Matrix_dist (&A);
+      ScalePermstructFree (&ScalePermstruct);
+      Destroy_LU (flat_len_loc, &grid, &LUstruct);
+      LUstructFree (&LUstruct);
+      if (options.SolveInitialized)
+         dSolveFinalize (&options, &SOLVEstruct);
+      if (iam == 0)
+         free_ind_maps ();
+      free (vars_per_solve);
+      free (vars);
+      SUPERLU_FREE (berr);
+      SUPERLU_FREE (B);
+
+      /* release SuperLU process grid */
+      superlu_gridexit (&grid);
+
    }
-
-   /* deallocate storage */
-   Destroy_CompRowLoc_Matrix_dist (&A);
-   ScalePermstructFree (&ScalePermstruct);
-   Destroy_LU (flat_len_loc, &grid, &LUstruct);
-   LUstructFree (&LUstruct);
-   if (options.SolveInitialized)
-      dSolveFinalize (&options, &SOLVEstruct);
-   if (iam == 0)
-      free_ind_maps ();
-   free (vars_per_solve);
-   free (vars);
-   SUPERLU_FREE (berr);
-   SUPERLU_FREE (B);
-
-   /* release SuperLU process grid */
-   superlu_gridexit (&grid);
 
    MPI_Finalize ();
 
