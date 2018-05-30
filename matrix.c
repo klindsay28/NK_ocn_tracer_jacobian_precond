@@ -108,6 +108,9 @@ per_tracer_opt_t *per_tracer_opt = NULL;
 
 coupled_tracer_opt_t coupled_tracer_opt;
 
+char *OCMIP_BGC_PO4_DOP_names[] = { "OCMIP_BGC_PO4", "OCMIP_BGC_DOP" };
+char *DIC_SHADOW_ALK_SHADOW_names[] = { "DIC_SHADOW", "ALK_SHADOW" };
+
 /******************************************************************************/
 
 void
@@ -3038,7 +3041,6 @@ add_sink_coupled_tracers (void)
    double ****SINK_RATE_FIELDS;
    int tracer_state_ind;
 
-   char *OCMIP_BGC_PO4_DOP_names[] = { "OCMIP_BGC_PO4", "OCMIP_BGC_DOP" };
    char **tracer_names = NULL;
 
    if (dbg_lvl > 1) {
@@ -3055,6 +3057,9 @@ add_sink_coupled_tracers (void)
       return 0;
    case coupled_tracer_OCMIP_BGC_PO4_DOP:
       tracer_names = OCMIP_BGC_PO4_DOP_names;
+      break;
+   case coupled_tracer_DIC_SHADOW_ALK_SHADOW:
+      tracer_names = DIC_SHADOW_ALK_SHADOW_names;
       break;
    }
 
@@ -3248,6 +3253,117 @@ add_d_SF_d_TRACER (void)
 
    if (d_SF_d_TRACER != NULL)
       free_2d_double (d_SF_d_TRACER);
+
+   if (dbg_lvl > 1) {
+      printf ("(%d) exiting %s\n", iam, subname);
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
+add_sf_coupled_tracers (void)
+{
+   char *subname = "add_sf_coupled_tracers";
+   int tracer_ind;
+   int tracer_ind_2;
+   int d_SF_d_TRACER_var_exists;
+   char *field_name;
+   double ***d_SF_d_TRACER_FIELDS;
+   int tracer_state_ind;
+
+   char **tracer_names = NULL;
+
+   if (dbg_lvl > 1) {
+      printf ("(%d) entering %s\n", iam, subname);
+      fflush (stdout);
+   }
+
+   switch (coupled_tracer_opt) {
+   case coupled_tracer_none:
+      if (dbg_lvl > 1) {
+         printf ("(%d) exiting %s\n", iam, subname);
+         fflush (stdout);
+      }
+      return 0;
+   case coupled_tracer_DIC_SHADOW_ALK_SHADOW:
+      tracer_names = DIC_SHADOW_ALK_SHADOW_names;
+      break;
+   }
+
+   if (tracer_names != NULL) {
+      if ((d_SF_d_TRACER_FIELDS = malloc ((size_t) coupled_tracer_cnt * sizeof (double **))) == NULL) {
+         fprintf (stderr, "(%d) malloc failed in %s for d_SF_d_TRACER_FIELDS\n", iam, subname);
+         return 1;
+      }
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++)
+         d_SF_d_TRACER_FIELDS[tracer_ind] = NULL;
+
+      for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+
+         /* allocate space for and read in corresponding file variables, if present in input file */
+
+         for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
+            if (tracer_ind_2 == tracer_ind)
+               continue;
+
+            if ((field_name = malloc (9 + strlen (tracer_names[tracer_ind]) + strlen (tracer_names[tracer_ind_2]))) == NULL) {
+               fprintf (stderr, "(%d) malloc failed in %s for field_name\n", iam, subname);
+               return 1;
+            }
+            sprintf (field_name, "d_SF_%s_d_%s", tracer_names[tracer_ind], tracer_names[tracer_ind_2]);
+            if (var_exists_in_file (tracer_fname, field_name, &d_SF_d_TRACER_var_exists)) {
+               fprintf (stderr, "(%d) var_exists_in_file failed in %s for field_name %s for tracer %s\n", iam, subname,
+                        field_name, per_tracer_opt[tracer_ind].sink_generic_tracer_name);
+               return 1;
+            }
+            if (d_SF_d_TRACER_var_exists) {
+               if ((d_SF_d_TRACER_FIELDS[tracer_ind_2] = malloc_2d_double (jmt, imt)) == NULL) {
+                  fprintf (stderr, "(%d) malloc failed in %s for d_SF_d_TRACER_FIELDS[%d]\n", iam, subname, tracer_ind_2);
+                  return 1;
+               }
+               if (dbg_lvl)
+                  printf ("(%d) %s: reading %s from %s\n", iam, subname, field_name, tracer_fname);
+               if (get_var_2d_double (tracer_fname, field_name, d_SF_d_TRACER_FIELDS[tracer_ind_2]))
+                  return 1;
+            } else {
+               if (dbg_lvl)
+                  printf ("(%d) %s: %s does not exist in %s\n", iam, subname, field_name, tracer_fname);
+               d_SF_d_TRACER_FIELDS[tracer_ind_2] = NULL;
+            }
+
+            free (field_name);
+         }
+
+         for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+            int i = tracer_state_ind_to_int3[tracer_state_ind].i;
+            int j = tracer_state_ind_to_int3[tracer_state_ind].j;
+            int k = tracer_state_ind_to_int3[tracer_state_ind].k;
+            int coef_ind = coef_ind_sink_other_tracers[tracer_ind][tracer_state_ind];
+            for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
+               if (tracer_ind_2 == tracer_ind)
+                  continue;
+               if ((d_SF_d_TRACER_FIELDS[tracer_ind_2] != NULL) && (k == 0)) {
+                  nzval_row_wise[coef_ind] += delta_t * d_SF_d_TRACER_FIELDS[tracer_ind_2][j][i] / dz[0];
+               }
+               coef_ind++;
+            }
+         }
+
+         /* deallocate allocated space */
+
+         for (tracer_ind_2 = 0; tracer_ind_2 < coupled_tracer_cnt; tracer_ind_2++) {
+            if (d_SF_d_TRACER_FIELDS[tracer_ind_2] != NULL) {
+               free_2d_double (d_SF_d_TRACER_FIELDS[tracer_ind_2]);
+               d_SF_d_TRACER_FIELDS[tracer_ind_2] = NULL;
+            }
+         }
+      }
+      free (d_SF_d_TRACER_FIELDS);
+   }
 
    if (dbg_lvl > 1) {
       printf ("(%d) exiting %s\n", iam, subname);
@@ -3458,6 +3574,9 @@ gen_sparse_matrix (double day_cnt)
       return 1;
 
    if (add_d_SF_d_TRACER ())
+      return 1;
+
+   if (add_sf_coupled_tracers ())
       return 1;
 
    sum_dup_vals ();

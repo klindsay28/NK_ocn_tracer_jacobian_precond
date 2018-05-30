@@ -49,7 +49,7 @@ typedef struct
 } per_tracer_opt_t;
 
 typedef enum
-{ coupled_tracer_none, coupled_tracer_OCMIP_BGC_PO4_DOP } coupled_tracer_opt_t;
+{ coupled_tracer_none, coupled_tracer_OCMIP_BGC_PO4_DOP, coupled_tracer_DIC_SHADOW_ALK_SHADOW } coupled_tracer_opt_t;
 
 /******************************************************************************/
 /* external variable declarations                                             */

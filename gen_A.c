@@ -302,6 +302,8 @@ read_opt_file ()
             coupled_tracer_opt = coupled_tracer_none;
          else if (strcmp (optval, "OCMIP_BGC_PO4_DOP") == 0)
             coupled_tracer_opt = coupled_tracer_OCMIP_BGC_PO4_DOP;
+         else if (strcmp (optval, "DIC_SHADOW_ALK_SHADOW") == 0)
+            coupled_tracer_opt = coupled_tracer_DIC_SHADOW_ALK_SHADOW;
          else {
             fprintf (stderr, "(%d) unknown %s: %s\n", iam, optname, optval);
             return 1;
@@ -315,8 +317,11 @@ read_opt_file ()
    fclose (fp);
 
    if (coupled_tracer_cnt == 2) {
-      if (coupled_tracer_opt != coupled_tracer_OCMIP_BGC_PO4_DOP) {
-         fprintf (stderr, "coupled_tracer_cnt = 2 only supported for coupled_tracer_type = OCMIP_BGC_PO4_DOP\n");
+      if ((coupled_tracer_opt != coupled_tracer_OCMIP_BGC_PO4_DOP)
+          && (coupled_tracer_opt != coupled_tracer_DIC_SHADOW_ALK_SHADOW)) {
+         fprintf (stderr,
+                  "(%d) coupled_tracer_cnt = 2 only supported for "
+                  "coupled_tracer_type = OCMIP_BGC_PO4_DOP, DIC_SHADOW_ALK_SHADOW\n", iam);
          return 1;
       }
    }
@@ -415,6 +420,9 @@ write_opts (void)
          break;
       case coupled_tracer_OCMIP_BGC_PO4_DOP:
          printf ("(%d) coupled_tracer_opt         = %s\n", iam, "OCMIP_BGC_PO4_DOP");
+         break;
+      case coupled_tracer_DIC_SHADOW_ALK_SHADOW:
+         printf ("(%d) coupled_tracer_opt         = %s\n", iam, "DIC_SHADOW_ALK_SHADOW");
          break;
       }
       printf ("(%d) matrix_fname               = %s\n\n", iam, matrix_fname);
