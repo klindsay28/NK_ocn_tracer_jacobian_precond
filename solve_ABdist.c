@@ -276,6 +276,8 @@ get_B_dist (char **vars_per_solve, double *B)
 
       for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
          /* read single tracer in as 3D variable */
+         if (dbg_lvl)
+            printf ("(%d) reading %s from %s\n", iam, vars_per_solve[tracer_ind], inout_fname);
          if (get_var_3d_double (inout_fname, vars_per_solve[tracer_ind], field_3d))
             return 1;
 
@@ -391,6 +393,8 @@ put_B_dist (char **vars_per_solve, double *B)
          }
 
          /* write out 3D variable */
+         if (dbg_lvl)
+            printf ("(%d) writing %s to %s\n", iam, vars_per_solve[tracer_ind], inout_fname);
          if (put_var_3d_double (inout_fname, vars_per_solve[tracer_ind], field_3d))
             return 1;
       }
