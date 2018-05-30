@@ -139,6 +139,11 @@ get_grid_info (char *circ_fname, char *reg_fname)
    if (get_var_2d_int (circ_fname, "KMT", KMT))
       return 1;
 
+   /* set negative KMT to 0 */
+   for (j = 0; j < jmt; j++)
+      for (i = 0; i < imt; i++)
+         KMT[j][i] = (KMT[j][i] < 0) ? 0 : KMT[j][i];
+
    /* set KMT to 0 in ignored regions */
    if (reg_fname != NULL) {
       if ((DYN_REGMASK = malloc_2d_int (jmt, imt)) == NULL) {
