@@ -45,6 +45,31 @@ var_exists_in_file (char *fname, char *varname, int *retval)
 /******************************************************************************/
 
 int
+get_att_double (char *fname, char *varname, char *attname, double *val)
+{
+   char *subname = "get_att_double";
+   int status;
+   int ncid;
+   int varid;
+
+   if ((status = nc_open (fname, NC_NOWRITE, &ncid)))
+      return handle_nc_error (subname, "nc_open", fname, status);
+
+   if ((status = nc_inq_varid (ncid, varname, &varid)))
+      return handle_nc_error (subname, "nc_inq_varid", varname, status);
+
+   if ((status = nc_get_att_double (ncid, varid, attname, val)))
+      return handle_nc_error (subname, "nc_get_att_double", varname, status);
+
+   if ((status = nc_close (ncid)))
+      return handle_nc_error (subname, "nc_close", fname, status);
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
 get_var_1d_int (char *fname, char *varname, int *field)
 {
    char *subname = "get_var_1d_int";

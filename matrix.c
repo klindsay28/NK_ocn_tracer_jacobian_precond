@@ -128,6 +128,36 @@ set_3d_double (double val, double ***FIELD)
 
 /******************************************************************************/
 
+void
+set_fv_2d_double (double fv, double val, double **FIELD)
+{
+   int i;
+   int j;
+
+   for (j = 0; j < jmt; j++)
+      for (i = 0; i < imt; i++)
+         if (FIELD[j][i] == fv)
+            FIELD[j][i] = val;
+}
+
+/******************************************************************************/
+
+void
+set_fv_3d_double (double fv, double val, double ***FIELD)
+{
+   int i;
+   int j;
+   int k;
+
+   for (k = 0; k < km; k++)
+      for (j = 0; j < jmt; j++)
+         for (i = 0; i < imt; i++)
+            if (FIELD[k][j][i] == fv)
+               FIELD[k][j][i] = val;
+}
+
+/******************************************************************************/
+
 int
 comp_tracer_state_len (void)
 {
@@ -957,6 +987,7 @@ load_UTE (double ***UTE)
    char *subname = "load_UTE";
    double ***WORK;
    double **DY;
+   double fv;
    int i;
    int ip1;
    int j;
@@ -981,8 +1012,14 @@ load_UTE (double ***UTE)
       printf ("(%d) %s: reading UVEL,DYU from %s\n", iam, subname, circ_fname);
    if (get_var_3d_double (circ_fname, "UVEL", WORK))
       return 1;
+   if (get_att_double (circ_fname, "UVEL", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, WORK);
    if (get_var_2d_double (circ_fname, "DYU", DY))
       return 1;
+   if (get_att_double (circ_fname, "DYU", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, DY);
    for (k = 0; k < km; k++)
       for (j = 1; j < jmt - 1; j++)
          for (i = 0; i < imt; i++) {
@@ -999,6 +1036,9 @@ load_UTE (double ***UTE)
          return 1;
       if (get_var_2d_double (circ_fname, "HTE", DY))
          return 1;
+      if (get_att_double (circ_fname, "HTE", "_FillValue", &fv))
+         return 1;
+      set_fv_2d_double (fv, 0.0, DY);
       for (k = 0; k < km; k++)
          for (j = 1; j < jmt - 1; j++)
             for (i = 0; i < imt; i++) {
@@ -1026,6 +1066,7 @@ load_VTN (double ***VTN)
    char *subname = "load_VTN";
    double ***WORK;
    double **DX;
+   double fv;
    int i;
    int im1;
    int j;
@@ -1050,8 +1091,14 @@ load_VTN (double ***VTN)
       printf ("(%d) %s: reading VVEL,DXU from %s\n", iam, subname, circ_fname);
    if (get_var_3d_double (circ_fname, "VVEL", WORK))
       return 1;
+   if (get_att_double (circ_fname, "VVEL", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, WORK);
    if (get_var_2d_double (circ_fname, "DXU", DX))
       return 1;
+   if (get_att_double (circ_fname, "DXU", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, DX);
    for (k = 0; k < km; k++)
       for (j = 1; j < jmt - 1; j++)
          for (i = 0; i < imt; i++) {
@@ -1067,8 +1114,14 @@ load_VTN (double ***VTN)
          printf ("(%d) %s: reading VISOP,HTN from %s\n", iam, subname, circ_fname);
       if (get_var_3d_double (circ_fname, "VISOP", WORK))
          return 1;
+      if (get_att_double (circ_fname, "VISOP", "_FillValue", &fv))
+         return 1;
+      set_fv_3d_double (fv, 0.0, WORK);
       if (get_var_2d_double (circ_fname, "HTN", DX))
          return 1;
+      if (get_att_double (circ_fname, "HTN", "_FillValue", &fv))
+         return 1;
+      set_fv_2d_double (fv, 0.0, DX);
       for (k = 0; k < km; k++)
          for (j = 1; j < jmt - 1; j++)
             for (i = 0; i < imt; i++)
@@ -1093,6 +1146,7 @@ load_WVEL (double ***WVEL)
 {
    char *subname = "load_WVEL";
    double ***WORK;
+   double fv;
    int i;
    int j;
    int k;
@@ -1112,6 +1166,9 @@ load_WVEL (double ***WVEL)
       printf ("(%d) %s: reading WVEL from %s\n", iam, subname, circ_fname);
    if (get_var_3d_double (circ_fname, "WVEL", WORK))
       return 1;
+   if (get_att_double (circ_fname, "WVEL", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, WORK);
    for (k = 0; k < km; k++)
       for (j = 1; j < jmt - 1; j++)
          for (i = 0; i < imt; i++)
@@ -1123,6 +1180,9 @@ load_WVEL (double ***WVEL)
          printf ("(%d) %s: reading WISOP from %s\n", iam, subname, circ_fname);
       if (get_var_3d_double (circ_fname, "WISOP", WORK))
          return 1;
+      if (get_att_double (circ_fname, "WISOP", "_FillValue", &fv))
+         return 1;
+      set_fv_3d_double (fv, 0.0, WORK);
       for (k = 0; k < km; k++)
          for (j = 1; j < jmt - 1; j++)
             for (i = 0; i < imt; i++)
@@ -1394,6 +1454,7 @@ int
 load_UTE_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 {
    char *subname = "load_UTE_upwind3";
+   double fv;
 
    if (dbg_lvl > 1) {
       printf ("(%d) entering %s\n", iam, subname);
@@ -1408,8 +1469,14 @@ load_UTE_upwind3 (double ***UTE_POS, double ***UTE_NEG)
 
    if (get_var_3d_double (circ_fname, "UTE_POS", UTE_POS))
       return 1;
+   if (get_att_double (circ_fname, "UTE_POS", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, UTE_POS);
    if (get_var_3d_double (circ_fname, "UTE_NEG", UTE_NEG))
       return 1;
+   if (get_att_double (circ_fname, "UTE_NEG", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, UTE_NEG);
 
    if (dbg_lvl > 1) {
       printf ("(%d) exiting %s\n", iam, subname);
@@ -1425,6 +1492,7 @@ int
 load_VTN_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 {
    char *subname = "load_VTN_upwind3";
+   double fv;
 
    if (dbg_lvl > 1) {
       printf ("(%d) entering %s\n", iam, subname);
@@ -1439,8 +1507,14 @@ load_VTN_upwind3 (double ***VTN_POS, double ***VTN_NEG)
 
    if (get_var_3d_double (circ_fname, "VTN_POS", VTN_POS))
       return 1;
+   if (get_att_double (circ_fname, "VTN_POS", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, VTN_POS);
    if (get_var_3d_double (circ_fname, "VTN_NEG", VTN_NEG))
       return 1;
+   if (get_att_double (circ_fname, "VTN_NEG", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, VTN_NEG);
 
    if (dbg_lvl > 1) {
       printf ("(%d) exiting %s\n", iam, subname);
@@ -1456,6 +1530,7 @@ int
 load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 {
    char *subname = "load_WVEL_upwind3";
+   double fv;
    int i;
    int j;
 
@@ -1472,8 +1547,14 @@ load_WVEL_upwind3 (double ***WVEL_POS, double ***WVEL_NEG)
 
    if (get_var_3d_double (circ_fname, "WTK_POS", WVEL_POS))
       return 1;
+   if (get_att_double (circ_fname, "WTK_POS", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, WVEL_POS);
    if (get_var_3d_double (circ_fname, "WTK_NEG", WVEL_NEG))
       return 1;
+   if (get_att_double (circ_fname, "WTK_NEG", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, WVEL_NEG);
 
    /* explicitly set surface velocity to zero */
    for (j = 1; j < jmt - 1; j++)
@@ -2198,6 +2279,7 @@ add_hmix_hor_file (void)
    double **HTE;
    double **HUW;
    double **HTN;
+   double fv;
 
    int tracer_ind;
    int tracer_state_ind;
@@ -2219,8 +2301,14 @@ add_hmix_hor_file (void)
       printf ("(%d) %s: reading KAPPA_ISOP,HOR_DIFF from %s\n", iam, subname, circ_fname);
    if (get_var_3d_double (circ_fname, "KAPPA_ISOP", KAPPA))
       return 1;
+   if (get_att_double (circ_fname, "KAPPA_ISOP", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, KAPPA);
    if (get_var_3d_double (circ_fname, "HOR_DIFF", WORK))
       return 1;
+   if (get_att_double (circ_fname, "HOR_DIFF", "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, WORK);
    {
       int i;
       int j;
@@ -2253,12 +2341,24 @@ add_hmix_hor_file (void)
       printf ("(%d) %s: reading HUS,HTE,HUW,HTN from %s\n", iam, subname, circ_fname);
    if (get_var_2d_double (circ_fname, "HUS", HUS))
       return 1;
+   if (get_att_double (circ_fname, "HUS", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HUS);
    if (get_var_2d_double (circ_fname, "HTE", HTE))
       return 1;
+   if (get_att_double (circ_fname, "HTE", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HTE);
    if (get_var_2d_double (circ_fname, "HUW", HUW))
       return 1;
+   if (get_att_double (circ_fname, "HUW", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HUW);
    if (get_var_2d_double (circ_fname, "HTN", HTN))
       return 1;
+   if (get_att_double (circ_fname, "HTN", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HTN);
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -2363,6 +2463,7 @@ add_hmix_const (void)
    double **HTE;
    double **HUW;
    double **HTN;
+   double fv;
 
    int tracer_ind;
    int tracer_state_ind;
@@ -2395,12 +2496,24 @@ add_hmix_const (void)
       printf ("(%d) %s: reading HUS,HTE,HUW,HTN from %s\n", iam, subname, circ_fname);
    if (get_var_2d_double (circ_fname, "HUS", HUS))
       return 1;
+   if (get_att_double (circ_fname, "HUS", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HUS);
    if (get_var_2d_double (circ_fname, "HTE", HTE))
       return 1;
+   if (get_att_double (circ_fname, "HTE", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HTE);
    if (get_var_2d_double (circ_fname, "HUW", HUW))
       return 1;
+   if (get_att_double (circ_fname, "HUW", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HUW);
    if (get_var_2d_double (circ_fname, "HTN", HTN))
       return 1;
+   if (get_att_double (circ_fname, "HTN", "_FillValue", &fv))
+      return 1;
+   set_fv_2d_double (fv, 0.0, HTN);
 
    for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
       for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
@@ -2613,6 +2726,7 @@ add_vmix_file (void)
    char *subname = "add_vmix_file";
    char *varname;
    double ***VDC_TOTAL, ***VDC_READ;
+   double fv;
    int i;
    int j;
    int k;
@@ -2639,12 +2753,18 @@ add_vmix_file (void)
       printf ("(%d) %s: reading %s from %s for VDC\n", iam, subname, varname, circ_fname);
    if (get_var_3d_double (circ_fname, varname, VDC_TOTAL))
       return 1;
+   if (get_att_double (circ_fname, varname, "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, VDC_TOTAL);
 
    varname = "VDC_GM";
    if (dbg_lvl)
       printf ("(%d) %s: reading %s from %s for VDC\n", iam, subname, varname, circ_fname);
    if (get_var_3d_double (circ_fname, varname, VDC_READ))
       return 1;
+   if (get_att_double (circ_fname, varname, "_FillValue", &fv))
+      return 1;
+   set_fv_3d_double (fv, 0.0, VDC_READ);
 
    for (k = 0; k < km; k++)
       for (j = 1; j < jmt - 1; j++)
