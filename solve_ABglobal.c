@@ -50,18 +50,18 @@ parse_cmd_line (int argc, char **argv)
       switch (opt) {
       case '?':
       case 'h':
-         fprintf (stderr, "%s\n", usage_msg);
+         fprintf (stderr, "(%d) %s\n", iam, usage_msg);
          return 1;
       case 'D':
          if (parse_to_int (optarg, &dbg_lvl)) {
-            fprintf (stderr, "error parsing argument '%s' for option '%c'\n", optarg, opt);
+            fprintf (stderr, "(%d) error parsing argument '%s' for option '%c'\n", iam, optarg, opt);
             return 1;
          }
          break;
       case 'n':
          cp = strtok (optarg, ",");
          if (parse_to_long (cp, &lval)) {
-            fprintf (stderr, "error parsing argument '%s' for option '%c'\n", cp, opt);
+            fprintf (stderr, "(%d) error parsing argument '%s' for option '%c'\n", iam, cp, opt);
             return 1;
          }
          nprow = lval;
@@ -69,7 +69,7 @@ parse_cmd_line (int argc, char **argv)
             npcol = nprow;
          } else {
             if (parse_to_long (cp, &lval)) {
-               fprintf (stderr, "error parsing argument '%s' for option '%c'\n", cp, opt);
+               fprintf (stderr, "(%d) error parsing argument '%s' for option '%c'\n", iam, cp, opt);
                return 1;
             }
             npcol = lval;
@@ -79,18 +79,18 @@ parse_cmd_line (int argc, char **argv)
          /* copy optarg string, so that later use of strtok doesn't modify the argv array */
          /* this is possibly not necessary */
          if ((vars = malloc (strlen (optarg) + 1)) == NULL) {
-            fprintf (stderr, "malloc failed in parse_cmd_line for vars\n");
+            fprintf (stderr, "(%d) malloc failed in parse_cmd_line for vars\n", iam);
             return 1;
          }
          strcpy (vars, optarg);
          break;
       default:
-         fprintf (stderr, "internal error: unhandled option '-%c'\n", opt);
+         fprintf (stderr, "(%d) internal error: unhandled option '-%c'\n", iam, opt);
          return 1;
       }
    }
    if (optind != argc - 2) {
-      fprintf (stderr, "unexpected number of arguments\n%s\n", usage_msg);
+      fprintf (stderr, "(%d) unexpected number of arguments\n%s\n", iam, usage_msg);
       return 1;
    }
    matrix_fname = argv[optind++];
@@ -114,7 +114,7 @@ get_sparse_matrix_global (void)
    char *subname = "get_sparse_matrix_global";
 
    if (dbg_lvl > 1) {
-      printf ("entering %s\n", subname);
+      printf ("(%d) entering %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -122,10 +122,10 @@ get_sparse_matrix_global (void)
       if (get_sparse_matrix (matrix_fname))
          return 1;
       if (dbg_lvl)
-         printf ("row-oriented matrix read in\n");
+         printf ("(%d) row-oriented matrix read in\n", iam);
       dCompRow_to_CompCol_dist (flat_len, flat_len, nnz, nzval_row_wise, colind, rowptr, &nzval_col_wise, &rowind, &colptr);
       if (dbg_lvl)
-         printf ("row-oriented matrix entries converted to column-oriented matrix entries\n");
+         printf ("(%d) row-oriented matrix entries converted to column-oriented matrix entries\n", iam);
       free_sparse_matrix ();
    }
 
@@ -138,10 +138,10 @@ get_sparse_matrix_global (void)
    MPI_Bcast (rowind, nnz, mpi_int_t, 0, grid.comm);
    MPI_Bcast (colptr, flat_len + 1, mpi_int_t, 0, grid.comm);
    if (dbg_lvl && (iam == 0))
-      printf ("column-oriented matrix entries broadcast\n");
+      printf ("(%d) column-oriented matrix entries broadcast\n", iam);
 
    if (dbg_lvl > 1) {
-      printf ("exiting %s\n", subname);
+      printf ("(%d) exiting %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -156,7 +156,7 @@ get_B_global (char **vars_per_solve, double *B)
    char *subname = "get_B_global";
 
    if (dbg_lvl > 1) {
-      printf ("entering %s\n", subname);
+      printf ("(%d) entering %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -169,7 +169,7 @@ get_B_global (char **vars_per_solve, double *B)
 
       /* allocate needed variables */
       if ((field_3d = malloc_3d_double (km, jmt, imt)) == NULL) {
-         fprintf (stderr, "malloc failed in %s for field_3d\n", subname);
+         fprintf (stderr, "(%d) malloc failed in %s for field_3d\n", iam, subname);
          return 1;
       }
 
@@ -198,7 +198,7 @@ get_B_global (char **vars_per_solve, double *B)
    }
 
    if (dbg_lvl > 1) {
-      printf ("exiting %s\n", subname);
+      printf ("(%d) exiting %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -213,7 +213,7 @@ put_B_global (char **vars_per_solve, double *B)
    char *subname = "put_B_global";
 
    if (dbg_lvl > 1) {
-      printf ("entering %s\n", subname);
+      printf ("(%d) entering %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -226,7 +226,7 @@ put_B_global (char **vars_per_solve, double *B)
 
       /* allocate needed variables */
       if ((field_3d = malloc_3d_double (km, jmt, imt)) == NULL) {
-         fprintf (stderr, "malloc failed in %s for field_3d\n", subname);
+         fprintf (stderr, "(%d) malloc failed in %s for field_3d\n", iam, subname);
          return 1;
       }
 
@@ -255,7 +255,7 @@ put_B_global (char **vars_per_solve, double *B)
    }
 
    if (dbg_lvl > 1) {
-      printf ("exiting %s\n", subname);
+      printf ("(%d) exiting %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -303,26 +303,26 @@ main (int argc, char *argv[])
       superlu_gridinit (MPI_COMM_WORLD, nprow, npcol, &grid);
 
       if (dbg_lvl && (iam == 0)) {
-         printf ("dbg_lvl            = %d\n", dbg_lvl);
-         printf ("nprow              = %lld\n", (long long) nprow);
-         printf ("npcol              = %lld\n", (long long) npcol);
-         printf ("vars               = %s\n", vars);
-         printf ("matrix_fname       = %s\n", matrix_fname);
-         printf ("inout_fname        = %s\n\n", inout_fname);
+         printf ("(%d) dbg_lvl            = %d\n", iam, dbg_lvl);
+         printf ("(%d) nprow              = %lld\n", iam, (long long) nprow);
+         printf ("(%d) npcol              = %lld\n", iam, (long long) npcol);
+         printf ("(%d) vars               = %s\n", iam, vars);
+         printf ("(%d) matrix_fname       = %s\n", iam, matrix_fname);
+         printf ("(%d) inout_fname        = %s\n\n", iam, inout_fname);
       }
 
       if (get_sparse_matrix_global ())
          exit (EXIT_FAILURE);
 
       if ((vars_per_solve = malloc ((size_t) coupled_tracer_cnt * sizeof (char *))) == NULL) {
-         fprintf (stderr, "malloc failed in %s for vars_per_solve\n", argv[0]);
+         fprintf (stderr, "(%d) malloc failed in %s for vars_per_solve\n", iam, argv[0]);
          exit (EXIT_FAILURE);
       }
 
       /* create compressed column matrix for A */
       dCreate_CompCol_Matrix_dist (&A, flat_len, flat_len, nnz, nzval_col_wise, rowind, colptr, SLU_NC, SLU_D, SLU_GE);
       if (dbg_lvl && (iam == 0))
-         printf ("column-oriented matrix created\n");
+         printf ("(%d) column-oriented matrix created\n", iam);
 
       /* use default SuperLU options */
       set_default_options_dist (&options);
@@ -345,11 +345,11 @@ main (int argc, char *argv[])
       /* factor matrix with no RHS */
       nrhs_tmp = 0;
       PStatInit (&stat);
-      printf ("calling pdgssvx_ABglobal\n");
+      printf ("(%d) calling pdgssvx_ABglobal\n", iam);
       pdgssvx_ABglobal (&options, &A, &ScalePermstruct, B, flat_len, nrhs_tmp, &grid, &LUstruct, berr, &stat, &info);
       if (dbg_lvl) {
          if (iam == 0)
-            printf ("dgssvx info = %d\n", info);
+            printf ("(%d) dgssvx info = %d\n", iam, info);
          if (options.PrintStat)
             PStatPrint (&options, &stat, &grid);
       }
@@ -370,14 +370,14 @@ main (int argc, char *argv[])
             if (tracer_ind > 0) {
                var = strtok (NULL, varsep);
                if (var == NULL) {
-                  fprintf (stderr, "error extracting tracer_ind=%d, ran out of var names\n", tracer_ind);
+                  fprintf (stderr, "(%d) error extracting tracer_ind=%d, ran out of var names\n", iam, tracer_ind);
                   exit (EXIT_FAILURE);
                }
             }
             if (dbg_lvl && (iam == 0))
-               printf ("processing variable %s\n", var);
+               printf ("(%d) processing variable %s\n", iam, var);
             if ((vars_per_solve[tracer_ind] = malloc (1 + strlen (var))) == NULL) {
-               fprintf (stderr, "malloc failed in %s for vars_per_solve[%d]\n", argv[0], tracer_ind);
+               fprintf (stderr, "(%d) malloc failed in %s for vars_per_solve[%d]\n", iam, argv[0], tracer_ind);
                exit (EXIT_FAILURE);
             }
             strcpy (vars_per_solve[tracer_ind], var);
@@ -387,11 +387,11 @@ main (int argc, char *argv[])
             exit (EXIT_FAILURE);
 
          PStatInit (&stat);
-         printf ("calling pdgssvx_ABglobal\n");
+         printf ("(%d) calling pdgssvx_ABglobal\n", iam);
          pdgssvx_ABglobal (&options, &A, &ScalePermstruct, B, flat_len, nrhs, &grid, &LUstruct, berr, &stat, &info);
          if (dbg_lvl) {
             if (iam == 0)
-               printf ("dgssvx info = %d\n", info);
+               printf ("(%d) dgssvx info = %d\n", iam, info);
             if (options.PrintStat)
                PStatPrint (&options, &stat, &grid);
          }

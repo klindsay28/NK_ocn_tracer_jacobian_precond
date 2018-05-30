@@ -3,14 +3,15 @@
 #include "netcdf.h"
 
 #include "file_io.h"
+#include "globals.h"
 
 /******************************************************************************/
 
 int
 handle_nc_error (char *subname, char *cdf_subname, char *msg, int status)
 {
-   fprintf (stderr, "ERROR returned from netCDF routine\n"
-            "\tsubname     : %s\n\tcdf_subname : %s\n\tmsg         : %s\n\tnetCDF msg  : %s\n",
+   fprintf (stderr, "(%d) ERROR returned from netCDF routine\n"
+            "\tsubname     : %s\n\tcdf_subname : %s\n\tmsg         : %s\n\tnetCDF msg  : %s\n", iam,
             subname, cdf_subname, msg, nc_strerror (status));
    return status;
 }

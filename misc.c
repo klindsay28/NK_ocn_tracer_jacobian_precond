@@ -1,4 +1,5 @@
 #include "misc.h"
+#include "globals.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -14,7 +15,7 @@ parse_to_long (char *str, long *val)
    char *cp;
 
    if ((str == NULL) || (*str == '\0')) {
-      fprintf (stderr, "%s:nothing to parse\n", subname);
+      fprintf (stderr, "(%d) %s:nothing to parse\n", iam, subname);
       return 1;
    }
 
@@ -23,12 +24,12 @@ parse_to_long (char *str, long *val)
    *val = strtol (str, &cp, 0);
 
    if (errno == ERANGE) {
-      fprintf (stderr, "%s:ERANGE error parsing '%s'\n", subname, str);
+      fprintf (stderr, "(%d) %s:ERANGE error parsing '%s'\n", iam, subname, str);
       return 1;
    }
 
    if (*cp != '\0') {
-      fprintf (stderr, "%s:unexpected character '%c' parsing '%s'\n", subname, *cp, str);
+      fprintf (stderr, "(%d) %s:unexpected character '%c' parsing '%s'\n", iam, subname, *cp, str);
       return 1;
    }
 
@@ -44,17 +45,17 @@ parse_to_int (char *str, int *val)
    long lval;
 
    if ((str == NULL) || (*str == '\0')) {
-      fprintf (stderr, "%s:nothing to parse\n", subname);
+      fprintf (stderr, "(%d) %s:nothing to parse\n", iam, subname);
       return 1;
    }
 
    if (parse_to_long (str, &lval)) {
-      fprintf (stderr, "%s:error from parse_to_long\n", subname);
+      fprintf (stderr, "(%d) %s:error from parse_to_long\n", iam, subname);
       return 1;
    }
 
    if ((lval > INT_MAX) || (lval < INT_MIN)) {
-      fprintf (stderr, "%s:value %ld out of int range\n", subname, lval);
+      fprintf (stderr, "(%d) %s:value %ld out of int range\n", iam, subname, lval);
       return 1;
    }
 
@@ -72,7 +73,7 @@ parse_to_double (char *str, double *val)
    char *cp;
 
    if ((str == NULL) || (*str == '\0')) {
-      fprintf (stderr, "%s:nothing to parse\n", subname);
+      fprintf (stderr, "(%d) %s:nothing to parse\n", iam, subname);
       return 1;
    }
 
@@ -81,12 +82,12 @@ parse_to_double (char *str, double *val)
    *val = strtod (str, &cp);
 
    if (errno == ERANGE) {
-      fprintf (stderr, "%s:ERANGE error parsing '%s'\n", subname, str);
+      fprintf (stderr, "(%d) %s:ERANGE error parsing '%s'\n", iam, subname, str);
       return 1;
    }
 
    if (*cp != '\0') {
-      fprintf (stderr, "%s:unexpected character '%c' parsing '%s'\n", subname, *cp, str);
+      fprintf (stderr, "(%d) %s:unexpected character '%c' parsing '%s'\n", iam, subname, *cp, str);
       return 1;
    }
 

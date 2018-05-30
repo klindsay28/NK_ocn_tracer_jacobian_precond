@@ -40,7 +40,7 @@ get_grid_dims (char *fname)
    size_t dimlen;
 
    if (dbg_lvl > 1) {
-      printf ("entering %s\n", subname);
+      printf ("(%d) entering %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -72,13 +72,13 @@ get_grid_dims (char *fname)
       return handle_nc_error (subname, "nc_close", fname, status);
 
    if (dbg_lvl && (iam == 0)) {
-      printf ("imt = %d\n", imt);
-      printf ("jmt = %d\n", jmt);
-      printf ("km  = %d\n", km);
+      printf ("(%d) imt = %d\n", iam, imt);
+      printf ("(%d) jmt = %d\n", iam, jmt);
+      printf ("(%d) km  = %d\n", iam, km);
    }
 
    if (dbg_lvl > 1) {
-      printf ("exiting %s\n", subname);
+      printf ("(%d) exiting %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -97,7 +97,7 @@ get_grid_info (char *circ_fname, char *reg_fname)
    int ip1;
 
    if (dbg_lvl > 1) {
-      printf ("entering %s\n", subname);
+      printf ("(%d) entering %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -105,35 +105,35 @@ get_grid_info (char *circ_fname, char *reg_fname)
       return 1;
 
    if ((z_t = malloc ((size_t) km * sizeof (double))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for z_t\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for z_t\n", iam, subname);
       return 1;
    }
    if (get_var_1d_double (circ_fname, "z_t", z_t))
       return 1;
 
    if ((dz = malloc ((size_t) km * sizeof (double))) == NULL) {
-      fprintf (stderr, "malloc failed in %s for dz\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for dz\n", iam, subname);
       return 1;
    }
    if (get_var_1d_double (circ_fname, "dz", dz))
       return 1;
 
    if ((TLONG = malloc_2d_double (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for TLONG\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for TLONG\n", iam, subname);
       return 1;
    }
    if (get_var_2d_double (circ_fname, "TLONG", TLONG))
       return 1;
 
    if ((TLAT = malloc_2d_double (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for TLAT\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for TLAT\n", iam, subname);
       return 1;
    }
    if (get_var_2d_double (circ_fname, "TLAT", TLAT))
       return 1;
 
    if ((KMT = malloc_2d_int (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for KMT\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for KMT\n", iam, subname);
       return 1;
    }
    if (get_var_2d_int (circ_fname, "KMT", KMT))
@@ -147,7 +147,7 @@ get_grid_info (char *circ_fname, char *reg_fname)
    /* set KMT to 0 in ignored regions */
    if (reg_fname != NULL) {
       if ((DYN_REGMASK = malloc_2d_int (jmt, imt)) == NULL) {
-         fprintf (stderr, "malloc failed in %s for DYN_REGMASK\n", subname);
+         fprintf (stderr, "(%d) malloc failed in %s for DYN_REGMASK\n", iam, subname);
          return 1;
       }
       if (get_var_2d_int (reg_fname, "DYN_REGMASK", DYN_REGMASK))
@@ -172,16 +172,16 @@ get_grid_info (char *circ_fname, char *reg_fname)
             north_flag = 1;
       }
       if (south_flag)
-         fprintf (stderr, "non-land found on southern-most row in %s\n", subname);
+         fprintf (stderr, "(%d) non-land found on southern-most row in %s\n", iam, subname);
       if (north_flag)
-         fprintf (stderr, "non-land found on northern-most row in %s\n", subname);
+         fprintf (stderr, "(%d) non-land found on northern-most row in %s\n", iam, subname);
       if (south_flag || north_flag)
          return 1;
    }
 
    /* construct KMU from (potentially modified) KMT */
    if ((KMU = malloc_2d_int (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for KMU\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for KMU\n", iam, subname);
       return 1;
    }
    for (j = 0; j < jmt - 1; j++)
@@ -198,14 +198,14 @@ get_grid_info (char *circ_fname, char *reg_fname)
    }
 
    if ((TAREA = malloc_2d_double (jmt, imt)) == NULL) {
-      fprintf (stderr, "malloc failed in %s for TAREA\n", subname);
+      fprintf (stderr, "(%d) malloc failed in %s for TAREA\n", iam, subname);
       return 1;
    }
    if (get_var_2d_double (circ_fname, "TAREA", TAREA))
       return 1;
 
    if (dbg_lvl > 1) {
-      printf ("exiting %s\n", subname);
+      printf ("(%d) exiting %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -228,7 +228,7 @@ put_grid_info (char *fname)
    char *string;
 
    if (dbg_lvl > 1) {
-      printf ("entering %s\n", subname);
+      printf ("(%d) entering %s\n", iam, subname);
       fflush (stdout);
    }
 
@@ -308,7 +308,7 @@ put_grid_info (char *fname)
       return 1;
 
    if (dbg_lvl > 1) {
-      printf ("exiting %s\n", subname);
+      printf ("(%d) exiting %s\n", iam, subname);
       fflush (stdout);
    }
 
