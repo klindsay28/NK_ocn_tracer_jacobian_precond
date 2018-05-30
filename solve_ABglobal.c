@@ -268,7 +268,7 @@ int
 main (int argc, char *argv[])
 {
    SuperMatrix A;
-   superlu_options_t options;
+   superlu_dist_options_t options;
    ScalePermstruct_t ScalePermstruct;
    LUstruct_t LUstruct;
    SuperLUStat_t stat;
