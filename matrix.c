@@ -2193,7 +2193,7 @@ adv_enforce_divfree (void)
          }
 
          coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
-         nzval_sum_non_self = -nzval_sum_non_self;
+         nzval_row_wise[coef_ind] = -nzval_sum_non_self;
       }
    }
 
