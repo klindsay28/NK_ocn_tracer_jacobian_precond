@@ -97,6 +97,7 @@ set_opt_defaults (void)
 {
    day_cnt = 365.0;
    adv_opt = adv_cent;
+   l_adv_enforce_divfree = 1;
    hmix_opt = hmix_isop_file;
    vmix_opt = vmix_file;
    coupled_tracer_cnt = 1;
@@ -163,6 +164,15 @@ read_opt_file ()
             adv_opt = adv_cent;
          else if (strcmp (optval, "upwind3") == 0)
             adv_opt = adv_upwind3;
+         else {
+            fprintf (stderr, "(%d) unknown %s: %s\n", iam, optname, optval);
+            return 1;
+         }
+      } else if (strcmp (optname, "l_adv_enforce_divfree") == 0) {
+         if (strcmp (optval, "0") == 0)
+            l_adv_enforce_divfree = 0;
+         else if (strcmp (optval, "1") == 0)
+            l_adv_enforce_divfree = 1;
          else {
             fprintf (stderr, "(%d) unknown %s: %s\n", iam, optname, optval);
             return 1;
@@ -355,6 +365,7 @@ write_opts (void)
          printf ("(%d) adv_opt                    = %s\n", iam, "upwind3");
          break;
       }
+      printf ("(%d) l_adv_enforce_divfree      = %d\n", iam, l_adv_enforce_divfree);
       switch (hmix_opt) {
       case hmix_none:
          printf ("(%d) hmix_opt                   = %s\n", iam, "none");

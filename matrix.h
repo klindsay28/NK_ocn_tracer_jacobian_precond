@@ -68,6 +68,7 @@ extern int_t *colind;
 extern int_t *rowptr;
 
 extern adv_opt_t adv_opt;
+extern int l_adv_enforce_divfree;
 
 extern hmix_opt_t hmix_opt;
 

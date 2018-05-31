@@ -97,6 +97,7 @@ double delta_t;
 double year_cnt;
 
 adv_opt_t adv_opt;
+int l_adv_enforce_divfree;
 
 hmix_opt_t hmix_opt;
 
@@ -2090,6 +2091,123 @@ add_adv (void)
 /******************************************************************************/
 
 int
+adv_enforce_divfree (void)
+{
+   char *subname = "adv_enforce_divfree";
+   int tracer_ind;
+   int tracer_state_ind;
+
+   if (dbg_lvl > 1) {
+      printf ("(%d) entering %s\n", iam, subname);
+      fflush (stdout);
+   }
+
+   for (tracer_ind = 0; tracer_ind < coupled_tracer_cnt; tracer_ind++) {
+      for (tracer_state_ind = 0; tracer_state_ind < tracer_state_len; tracer_state_ind++) {
+         double nzval_sum_non_self;
+         int i;
+         int ip1;
+         int im1;
+         int ip2;
+         int im2;
+         int j;
+         int k;
+         int coef_ind;
+
+         i = tracer_state_ind_to_int3[tracer_state_ind].i;
+         j = tracer_state_ind_to_int3[tracer_state_ind].j;
+         k = tracer_state_ind_to_int3[tracer_state_ind].k;
+         ip1 = (i < imt - 1) ? i + 1 : 0;
+         im1 = (i > 0) ? i - 1 : imt - 1;
+         ip2 = (ip1 < imt - 1) ? ip1 + 1 : 0;
+         im2 = (im1 > 0) ? im1 - 1 : imt - 1;
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+
+         /* cell itself */
+         nzval_sum_non_self = 0.0;
+         coef_ind++;
+         /* cell 1 level shallower */
+         if (k - 1 >= 0) {
+            nzval_sum_non_self += nzval_row_wise[coef_ind];
+            coef_ind++;
+         }
+         /* cell 1 level deeper */
+         if (k + 1 < KMT[j][i]) {
+            nzval_sum_non_self += nzval_row_wise[coef_ind];
+            coef_ind++;
+         }
+         /* cell 1 unit east */
+         if (k < KMT[j][ip1]) {
+            nzval_sum_non_self += nzval_row_wise[coef_ind];
+            coef_ind++;
+         }
+         /* cell 1 unit west */
+         if (k < KMT[j][im1]) {
+            nzval_sum_non_self += nzval_row_wise[coef_ind];
+            coef_ind++;
+         }
+         /* cell 1 unit north */
+         if (k < KMT[j + 1][i]) {
+            nzval_sum_non_self += nzval_row_wise[coef_ind];
+            coef_ind++;
+         }
+         /* cell 1 unit south */
+         if (k < KMT[j - 1][i]) {
+            nzval_sum_non_self += nzval_row_wise[coef_ind];
+            coef_ind++;
+         }
+
+         coef_ind = coef_ind_adv_non_nbr[tracer_ind][tracer_state_ind];
+         if (adv_opt == adv_upwind3) {
+            /* cell 2 level shallower */
+            if (k - 2 >= 0) {
+               nzval_sum_non_self += nzval_row_wise[coef_ind];
+               coef_ind++;
+            }
+            /* cell 2 level deeper */
+            if (k + 2 < KMT[j][i]) {
+               nzval_sum_non_self += nzval_row_wise[coef_ind];
+               coef_ind++;
+            }
+            /* cell 2 unit east */
+            if (k < KMT[j][ip2]) {
+               nzval_sum_non_self += nzval_row_wise[coef_ind];
+               coef_ind++;
+            }
+            /* cell 2 unit west */
+            if (k < KMT[j][im2]) {
+               nzval_sum_non_self += nzval_row_wise[coef_ind];
+               coef_ind++;
+            }
+            /* cell 2 unit north */
+            if ((j + 2 < jmt) && (k < KMT[j + 2][i])) {
+               nzval_sum_non_self += nzval_row_wise[coef_ind];
+               coef_ind++;
+            }
+            /* cell 2 unit south */
+            if ((j - 2 >= 0) && (k < KMT[j - 2][i])) {
+               nzval_sum_non_self += nzval_row_wise[coef_ind];
+               coef_ind++;
+            }
+         }
+
+         coef_ind = coef_ind_self[tracer_ind][tracer_state_ind];
+         nzval_sum_non_self = -nzval_sum_non_self;
+      }
+   }
+
+   if (dbg_lvl > 1) {
+      printf ("(%d) exiting %s\n", iam, subname);
+      fflush (stdout);
+   }
+
+   return 0;
+}
+
+/******************************************************************************/
+
+int
 add_hmix_isop_file (void)
 {
    char *subname = "add_hmix_isop_file";
@@ -3672,8 +3790,12 @@ gen_sparse_matrix (double day_cnt)
    if (init_matrix ())
       return 1;
 
+   /* add_adv must be called first, so that adv_enforce_divfree can work properly */
    if (add_adv ())
       return 1;
+
+   if (l_adv_enforce_divfree)
+      adv_enforce_divfree ();
 
    if (add_hmix ())
       return 1;
