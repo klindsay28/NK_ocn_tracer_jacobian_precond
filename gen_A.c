@@ -191,7 +191,9 @@ read_opt_file ()
             return 1;
          }
       } else if (strcmp (optname, "vmix_type") == 0) {
-         if (strcmp (optval, "const") == 0)
+         if (strcmp (optval, "none") == 0)
+            vmix_opt = vmix_none;
+         else if (strcmp (optval, "const") == 0)
             vmix_opt = vmix_const;
          else if (strcmp (optval, "file") == 0)
             vmix_opt = vmix_file;
@@ -381,6 +383,9 @@ write_opts (void)
          break;
       }
       switch (vmix_opt) {
+      case vmix_none:
+         printf ("(%d) vmix_opt                   = %s\n", iam, "none");
+         break;
       case vmix_const:
          printf ("(%d) vmix_opt                   = %s\n", iam, "const");
          break;

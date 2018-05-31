@@ -3036,6 +3036,8 @@ add_vmix (void)
    case vmix_const:
       add_vmix_const ();
       break;
+   case vmix_none:
+      break;
    }
 
    if (dbg_lvl > 1) {

@@ -30,7 +30,7 @@ typedef enum
 { hmix_none, hmix_const, hmix_hor_file, hmix_isop_file } hmix_opt_t;
 
 typedef enum
-{ vmix_const, vmix_file, vmix_matrix_file } vmix_opt_t;
+{ vmix_none, vmix_const, vmix_file, vmix_matrix_file } vmix_opt_t;
 
 typedef enum
 { sink_none, sink_const, sink_const_shallow, sink_file, sink_generic_tracer } sink_opt_t;
