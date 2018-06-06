@@ -1,1 +1,0 @@
-/glade/u/home/klindsay/libs/cheyenne/SuperLU_DIST_5.1.3/make.inc

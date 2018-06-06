@@ -1,8 +1,12 @@
-include make.inc
 
-REGENW := FALSE
+# location of SuperLU_DIST install
+DSuperLUroot = /glade/u/home/klindsay/libs/cheyenne/SuperLU_DIST_5.1.3
 
+# add location of SuperLU_DIST header files to compiler invocation
 HEADER = -I$(DSuperLUroot)/SRC
+
+# incorporate SuperLU_DIST make variables, to ensure build is consistent with SuperLU_DIST
+include $(DSuperLUroot)/make.inc
 
 all: bin/gen_A bin/solve_ABglobal bin/solve_ABdist
 
