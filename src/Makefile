@@ -12,21 +12,23 @@ include $(DSuperLUroot)/make.inc
 NETCDF_CFLAGS = $(shell nc-config --cflags)
 NETCDF_LIBS   = $(shell nc-config --libs)
 
-all: bin/gen_A bin/solve_ABglobal bin/solve_ABdist
+BINDIR = ../bin
+
+all: $(BINDIR)/gen_A $(BINDIR)/solve_ABglobal $(BINDIR)/solve_ABdist
 
 include Depends
 
-bin/gen_A: gen_A.o $(OBJS)
+$(BINDIR)/gen_A: gen_A.o $(OBJS)
 	$(LOADER) $(LOADOPTS) gen_A.o $(OBJS) $(NETCDF_LIBS) -o $@
 
-bin/solve_ABglobal: solve_ABglobal.o $(OBJS) $(DSUPERLULIB)
+$(BINDIR)/solve_ABglobal: solve_ABglobal.o $(OBJS) $(DSUPERLULIB)
 	$(LOADER) $(LOADOPTS) solve_ABglobal.o $(OBJS) $(LIBS) $(NETCDF_LIBS) -lm -o $@
 
-bin/solve_ABdist: solve_ABdist.o $(OBJS) $(DSUPERLULIB)
+$(BINDIR)/solve_ABdist: solve_ABdist.o $(OBJS) $(DSUPERLULIB)
 	$(LOADER) $(LOADOPTS) solve_ABdist.o $(OBJS) $(LIBS) $(NETCDF_LIBS) -lm -o $@
 
 .c.o:
 	$(CC) $(CFLAGS) $(NETCDF_CFLAGS) $(CDEFS) $(HEADER) -c $< $(VERBOSE)
 
 clean:
-	rm -f *.o bin/gen_A bin/solve_ABglobal bin/solve_ABdist
+	rm -f *.o $(BINDIR)/gen_A $(BINDIR)/solve_ABglobal $(BINDIR)/solve_ABdist
