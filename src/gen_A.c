@@ -118,6 +118,8 @@ read_opt_file ()
    FILE *fp;
    char *optname;
    char *optval;
+   int line_number = 0;
+   int linelen;
    int new_coupled_tracer_cnt;
    int tracer_ind = 0;
 
@@ -133,6 +135,13 @@ read_opt_file ()
    }
 
    while (fgets (line, MAX_LINE_LEN, fp) != NULL) {
+      line_number++;
+      linelen = strlen(line);
+      if (linelen == 0) continue;
+      if (line[linelen-1] != '\n') {
+         fprintf (stderr, "(%d) line number %d in %s too long\n", iam, line_number, opt_fname);
+         return 1;
+      }
       optname = strtok (line, " \n");
       if ((optval = strtok (NULL, " \n")) == NULL) {
          fprintf (stderr, "(%d) unspecified value for %s\n", iam, optname);
